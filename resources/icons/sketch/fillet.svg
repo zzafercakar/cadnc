@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Two edges meeting at a corner -->
+  <line x1="5" y1="19" x2="5" y2="9" stroke="#475569" stroke-width="2" stroke-linecap="round"/>
+  <line x1="15" y1="19" x2="5" y2="19" stroke="#475569" stroke-width="2" stroke-linecap="round"/>
+  <!-- Fillet arc at the corner with vivid blue -->
+  <path d="M5 9 Q5 19 15 19" fill="none" stroke="#3B82F6" stroke-width="2.2" stroke-linecap="round"/>
+  <!-- Corner highlight dot -->
+  <circle cx="5" cy="19" r="2" fill="#F59E0B" stroke="#D97706" stroke-width="0.8"/>
+  <!-- Radius indicator -->
+  <line x1="5" y1="14" x2="10" y2="19" stroke="#3B82F6" stroke-width="0.8" stroke-dasharray="1.5,1"/>
+  <text x="11" y="16" font-size="5.5" font-weight="bold" fill="#3B82F6" font-family="sans-serif">R</text>
+</svg>

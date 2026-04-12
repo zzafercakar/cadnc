@@ -1,0 +1,86 @@
+project:
+  name: CADNC
+  description: FreeCAD-backed CAD-CAM desktop application with modern QML UI
+  version: 0.1.0
+  language: C++17
+  license: LGPL-2.1 (FreeCAD modules) + Proprietary (adapter, UI, CAM, nesting)
+
+architecture:
+  pattern: "Layered: UI Shell → Adapter → FreeCAD Modules → OCCT Kernel"
+  backend: FreeCAD App/Part/Sketcher/PartDesign modules (LGPL)
+  kernel: OpenCASCADE (OCCT)
+  ui: Qt6 Quick / QML
+  cam: Custom module (ported from MilCAD)
+  nesting: Custom module (ported from MilCAD)
+
+tech_stack:
+  language: C++17
+  build: CMake 3.22+
+  ui_framework: Qt6 Quick / QML
+  cad_backend: FreeCAD 1.2 App modules
+  geometry_kernel: OpenCASCADE 7.6+
+  constraint_solver: planegcs (via FreeCAD Sketcher)
+  python: Python 3 (required by FreeCAD)
+  testing: Google Test
+  ci: GitHub Actions
+
+modules:
+  freecad/Base:
+    description: Math, I/O, type system, Python integration
+    origin: FreeCAD
+  freecad/App:
+    description: Document, Property, Expression, Transaction system
+    origin: FreeCAD
+  freecad/Mod/Part/App:
+    description: TopoShape, Geometry, Part features
+    origin: FreeCAD
+  freecad/Mod/Sketcher/App:
+    description: SketchObject, Constraints, planegcs solver
+    origin: FreeCAD
+  freecad/Mod/PartDesign/App:
+    description: Pad, Pocket, Fillet, Chamfer, Pattern features
+    origin: FreeCAD
+  adapter:
+    description: Thin facade layer between UI and FreeCAD backend
+    origin: Custom
+  cam:
+    description: CAM toolpath generation, G-Code, post-processors
+    origin: MilCAD
+  nesting:
+    description: Sheet nesting algorithms (BLF, bounding box)
+    origin: MilCAD
+  ui:
+    description: QML-based UI shell
+    origin: Custom (new)
+  viewport:
+    description: 3D viewport (OCCT-based rendering)
+    origin: Custom (new)
+
+dependencies:
+  system:
+    - python3-dev
+    - libboost-all-dev
+    - libxerces-c-dev
+    - zlib1g-dev
+    - libicu-dev
+    - opencascade-dev
+    - qt6-declarative-dev
+    - qt6-declarative-dev-tools
+    - libeigen3-dev
+    - libfreetype-dev
+    - libgl-dev
+    - libglx-dev
+    - qt6-svg-dev
+
+build:
+  configure: cmake -B build -S .
+  build: cmake --build build -j$(nproc)
+  run: DISPLAY=:0 QT_QPA_PLATFORM=xcb ./build/cadnc
+
+status:
+  phase: "Faz 0 — Project skeleton setup"
+  freecad_integration: "Not started — modules copied, build not wired"
+  adapter: "Skeleton only — facade headers with TODOs"
+  ui: "Minimal shell — Main.qml with placeholder viewport"
+  cam: "Ported from MilCAD — needs adapter integration"
+  nesting: "Ported from MilCAD — needs adapter integration"

@@ -1,0 +1,8 @@
+GNU LESSER GENERAL PUBLIC LICENSE
+Version 2.1, February 1999
+
+This project uses FreeCAD modules licensed under LGPL-2.1-or-later.
+See freecad/LICENSE for the full FreeCAD license text.
+
+Additional components (adapter, cam, nesting, ui) are proprietary.
+Copyright (c) 2026 SMB Engineering. All rights reserved.
