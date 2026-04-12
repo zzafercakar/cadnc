@@ -47,6 +47,7 @@ CMakeLists.txt.user
 Generated/
 .cache/
 Testing/
+__cmake_systeminformation/
 
 # Logs
 *.log

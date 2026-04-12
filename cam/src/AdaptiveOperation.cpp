@@ -14,9 +14,12 @@
 #include "AdaptiveOperation.h"
 
 #include <cmath>
-#include <numbers>
 
 namespace MilCAD {
+
+namespace {
+constexpr double kPi = 3.14159265358979323846;
+}
 
 AdaptiveOperation::AdaptiveOperation()
 {
@@ -36,15 +39,15 @@ void AdaptiveOperation::generateHelixEntry(
     if (depth < 1e-6 || radius < 1e-6) return;
 
     // Compute helix parameters
-    double helixAngleRad = helixAngle_ * std::numbers::pi / 180.0;
-    double pitchPerRev = 2.0 * std::numbers::pi * radius * std::tan(helixAngleRad);
+    double helixAngleRad = helixAngle_ * kPi / 180.0;
+    double pitchPerRev = 2.0 * kPi * radius * std::tan(helixAngleRad);
     if (pitchPerRev < 1e-6) pitchPerRev = 0.5;  // Minimum pitch
 
     int numRevolutions = std::max(1, static_cast<int>(std::ceil(depth / pitchPerRev)));
     int pointsPerRev = 36;  // 10-degree increments
     int totalPoints = numRevolutions * pointsPerRev;
     double zStep = depth / totalPoints;
-    double angleStep = 2.0 * std::numbers::pi / pointsPerRev;
+    double angleStep = 2.0 * kPi / pointsPerRev;
 
     double currentZ = startZ;
     double currentAngle = 0.0;
@@ -108,8 +111,8 @@ void AdaptiveOperation::generateAdaptivePasses(
         opType_ == AdaptiveOpType::ProfilingInside) {
         // Spiral outward from center
         for (double r = startRadius; r <= endRadius; r += stepOverDist) {
-            int points = std::max(12, static_cast<int>(2.0 * std::numbers::pi * r / 2.0));
-            double angleStep = 2.0 * std::numbers::pi / points;
+            int points = std::max(12, static_cast<int>(2.0 * kPi * r / 2.0));
+            double angleStep = 2.0 * kPi / points;
 
             for (int i = 0; i < points; ++i) {
                 double a1 = i * angleStep;

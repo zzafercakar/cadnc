@@ -10,7 +10,6 @@
 #include "HelixOperation.h"
 
 #include <cmath>
-#include <numbers>
 
 namespace MilCAD {
 

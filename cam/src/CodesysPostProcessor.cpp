@@ -20,11 +20,19 @@ namespace MilCAD {
 std::vector<GCodeBlock> CodesysPostProcessor::generatePreamble() const
 {
     // CODESYS DIN66025 style: G75 reset + absolute metric mode.
-    return {
-        GCodeBlock{.n = 10, .g = 75},
-        GCodeBlock{.n = 20, .g = 90},
-        GCodeBlock{.n = 30, .g = 21}
-    };
+    GCodeBlock reset;
+    reset.n = 10;
+    reset.g = 75;
+
+    GCodeBlock absolute;
+    absolute.n = 20;
+    absolute.g = 90;
+
+    GCodeBlock metric;
+    metric.n = 30;
+    metric.g = 21;
+
+    return {reset, absolute, metric};
 }
 
 /**
@@ -33,9 +41,10 @@ std::vector<GCodeBlock> CodesysPostProcessor::generatePreamble() const
  */
 std::vector<GCodeBlock> CodesysPostProcessor::generatePostamble() const
 {
-    return {
-        GCodeBlock{.n = 9990, .m = 30}
-    };
+    GCodeBlock end;
+    end.n = 9990;
+    end.m = 30;
+    return {end};
 }
 
 /**

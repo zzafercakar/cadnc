@@ -1,149 +1,84 @@
 cmake_minimum_required(VERSION 3.22)
 project(CADNC VERSION 0.1.0 LANGUAGES CXX)
 
-# ── C++ Standard ──────────────────────────────────────────────────────────────
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# ── Build Options ─────────────────────────────────────────────────────────────
-option(CADNC_ENABLE_ASAN    "Enable AddressSanitizer"              OFF)
-option(CADNC_ENABLE_TSAN    "Enable ThreadSanitizer"               OFF)
-option(CADNC_ENABLE_UBSAN   "Enable UndefinedBehaviorSanitizer"    OFF)
-option(CADNC_ENABLE_COVERAGE "Enable code coverage (gcov/lcov)"    OFF)
-option(CADNC_BUILD_TESTS    "Build unit tests"                     ON)
+option(CADNC_ENABLE_ASAN "Enable AddressSanitizer" OFF)
+option(CADNC_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
+option(CADNC_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
+option(CADNC_ENABLE_COVERAGE "Enable code coverage (gcov/lcov)" OFF)
+option(CADNC_BUILD_TESTS "Build unit tests" ON)
+option(CADNC_ENABLE_FREECAD_BACKEND "Enable FreeCAD backend integration" OFF)
 
-# ── Sanitizer Configuration ───────────────────────────────────────────────────
 if(CADNC_ENABLE_ASAN)
     add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
     add_link_options(-fsanitize=address)
 endif()
+
 if(CADNC_ENABLE_TSAN)
     add_compile_options(-fsanitize=thread)
     add_link_options(-fsanitize=thread)
 endif()
+
 if(CADNC_ENABLE_UBSAN)
     add_compile_options(-fsanitize=undefined)
     add_link_options(-fsanitize=undefined)
 endif()
+
 if(CADNC_ENABLE_COVERAGE)
     add_compile_options(--coverage -fprofile-arcs -ftest-coverage)
     add_link_options(--coverage)
 endif()
 
-# ── Find Dependencies ─────────────────────────────────────────────────────────
-# Qt6
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick Qml Widgets OpenGL OpenGLWidgets Svg Xml)
-
-# OpenCASCADE
-if(UNIX AND NOT APPLE)
-    set(OpenCASCADE_DIR "/usr/lib/x86_64-linux-gnu/cmake/opencascade"
-        CACHE PATH "OpenCASCADE CMake config path")
-endif()
-find_package(OpenCASCADE REQUIRED)
-
-# Python3 (required by FreeCAD modules)
-find_package(Python3 REQUIRED COMPONENTS Development Interpreter)
-
-# Boost
-find_package(Boost REQUIRED)
-
-# Eigen3
-find_package(Eigen3 REQUIRED)
-
-# XercesC (required by FreeCAD Base)
-find_package(XercesC REQUIRED)
-
-# ZLIB
-find_package(ZLIB REQUIRED)
-
-# ICU (optional, for FreeCAD Base)
-find_package(ICU COMPONENTS uc data)
-
-# OpenGL
+find_package(Qt6 6.2 REQUIRED COMPONENTS Core Gui Quick Qml QuickControls2 Widgets OpenGL OpenGLWidgets Svg Xml)
 find_package(OpenGL REQUIRED)
 
-# ── Version Header ────────────────────────────────────────────────────────────
+if(UNIX AND NOT APPLE AND NOT OpenCASCADE_DIR AND EXISTS "/usr/lib/x86_64-linux-gnu/cmake/opencascade")
+    set(OpenCASCADE_DIR "/usr/lib/x86_64-linux-gnu/cmake/opencascade"
+        CACHE PATH "OpenCASCADE CMake config path" FORCE)
+endif()
+find_package(OpenCASCADE REQUIRED COMPONENTS
+    FoundationClasses
+    ModelingData
+    ModelingAlgorithms
+    Visualization
+    ApplicationFramework
+    DataExchange
+)
+
+if(CADNC_ENABLE_FREECAD_BACKEND)
+    find_package(Python3 REQUIRED COMPONENTS Development Interpreter)
+    find_package(Boost REQUIRED)
+    find_package(Eigen3 REQUIRED)
+    find_package(XercesC REQUIRED)
+    find_package(ZLIB REQUIRED)
+    find_package(ICU COMPONENTS uc data)
+endif()
+
 configure_file(
     "${CMAKE_SOURCE_DIR}/app/AppVersion.h.in"
     "${CMAKE_BINARY_DIR}/generated/AppVersion.h"
-)
-include_directories(${CMAKE_BINARY_DIR}/generated)
-
-# ── FreeCAD Backend Modules ───────────────────────────────────────────────────
-# These are built as shared libraries providing CAD backend functionality.
-# TODO: Add freecad/CMakeLists.txt to build Base, App, Part, Sketcher, PartDesign
-# add_subdirectory(freecad)
-
-# ── Include Directories ───────────────────────────────────────────────────────
-include_directories(
-    ${OpenCASCADE_INCLUDE_DIR}
-    ${Python3_INCLUDE_DIRS}
-    ${Boost_INCLUDE_DIRS}
-    ${EIGEN3_INCLUDE_DIR}
-    ${XercesC_INCLUDE_DIRS}
-    adapter/inc
-    cam/inc
-    nesting/inc
-    util/inc
-    viewport/inc
-    ui/src
+    @ONLY
 )
 
-# ── Adapter Library ───────────────────────────────────────────────────────────
-file(GLOB ADAPTER_HEADERS adapter/inc/*.h)
-file(GLOB ADAPTER_SOURCES adapter/src/*.cpp)
-
-# ── CAM Module ────────────────────────────────────────────────────────────────
-file(GLOB CAM_HEADERS cam/inc/*.h)
-file(GLOB CAM_SOURCES cam/src/*.cpp)
-
-# ── Nesting Module ────────────────────────────────────────────────────────────
-file(GLOB NESTING_HEADERS nesting/inc/*.h)
-file(GLOB NESTING_SOURCES nesting/src/*.cpp)
-
-# ── Util Module ───────────────────────────────────────────────────────────────
-file(GLOB UTIL_HEADERS util/inc/*.h)
-
-# ── Viewport Module ───────────────────────────────────────────────────────────
-file(GLOB VIEWPORT_HEADERS viewport/inc/*.h)
-file(GLOB VIEWPORT_SOURCES viewport/src/*.cpp)
-
-# ── UI Bridge Sources ─────────────────────────────────────────────────────────
-file(GLOB UI_SOURCES ui/src/*.cpp ui/src/*.h)
-
-# ── Main Application ─────────────────────────────────────────────────────────
-add_executable(cadnc
-    app/main.cpp
-    ${ADAPTER_HEADERS} ${ADAPTER_SOURCES}
-    ${CAM_HEADERS} ${CAM_SOURCES}
-    ${NESTING_HEADERS} ${NESTING_SOURCES}
-    ${UTIL_HEADERS}
-    ${VIEWPORT_HEADERS} ${VIEWPORT_SOURCES}
-    ${UI_SOURCES}
-)
-
-set_target_properties(cadnc PROPERTIES OUTPUT_NAME cadnc)
-
-target_link_libraries(cadnc PRIVATE
-    Qt6::Core
-    Qt6::Gui
-    Qt6::Quick
-    Qt6::Qml
-    Qt6::Widgets
-    Qt6::OpenGL
-    Qt6::OpenGLWidgets
-    Qt6::Svg
-    Qt6::Xml
-    OpenGL::GL
-    # TODO: Link FreeCAD backend libraries when built
-    # FreeCADBase FreeCADApp Part Sketcher PartDesign
-)
-
-# ── QML Resources ─────────────────────────────────────────────────────────────
-file(GLOB QML_FILES ui/qml/*.qml ui/qml/components/*.qml)
-file(GLOB ICON_FILES
+file(GLOB ADAPTER_HEADERS CONFIGURE_DEPENDS adapter/inc/*.h)
+file(GLOB ADAPTER_SOURCES CONFIGURE_DEPENDS adapter/src/*.cpp)
+file(GLOB CAM_HEADERS CONFIGURE_DEPENDS cam/inc/*.h)
+file(GLOB CAM_SOURCES CONFIGURE_DEPENDS cam/src/*.cpp)
+file(GLOB NESTING_HEADERS CONFIGURE_DEPENDS nesting/inc/*.h)
+file(GLOB NESTING_SOURCES CONFIGURE_DEPENDS nesting/src/*.cpp)
+file(GLOB UTIL_HEADERS CONFIGURE_DEPENDS util/inc/*.h)
+file(GLOB UTIL_SOURCES CONFIGURE_DEPENDS util/src/*.cpp)
+file(GLOB VIEWPORT_HEADERS CONFIGURE_DEPENDS viewport/inc/*.h)
+file(GLOB VIEWPORT_SOURCES CONFIGURE_DEPENDS viewport/src/*.cpp)
+file(GLOB UI_SOURCES CONFIGURE_DEPENDS ui/src/*.cpp ui/src/*.h)
+file(GLOB QML_FILES CONFIGURE_DEPENDS ui/qml/*.qml ui/qml/components/*.qml ui/qml/*.js)
+file(GLOB ICON_FILES CONFIGURE_DEPENDS
     resources/icons/*.svg
     resources/icons/constraint/*.svg
     resources/icons/part/*.svg
@@ -152,6 +87,61 @@ file(GLOB ICON_FILES
     resources/icons/sketch/*.svg
     resources/icons/quickaccess/*.svg
 )
+
+add_executable(cadnc
+    app/main.cpp
+    ${ADAPTER_HEADERS}
+    ${ADAPTER_SOURCES}
+    ${CAM_HEADERS}
+    ${CAM_SOURCES}
+    ${NESTING_HEADERS}
+    ${NESTING_SOURCES}
+    ${UTIL_HEADERS}
+    ${UTIL_SOURCES}
+    ${VIEWPORT_HEADERS}
+    ${VIEWPORT_SOURCES}
+    ${UI_SOURCES}
+)
+
+set_target_properties(cadnc PROPERTIES OUTPUT_NAME cadnc)
+
+target_include_directories(cadnc PRIVATE
+    "${CMAKE_BINARY_DIR}/generated"
+    adapter/inc
+    cam/inc
+    nesting/inc
+    util/inc
+    viewport/inc
+    ui/src
+)
+
+target_include_directories(cadnc SYSTEM PRIVATE
+    ${OpenCASCADE_INCLUDE_DIR}
+)
+
+target_link_libraries(cadnc PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Quick
+    Qt6::Qml
+    Qt6::QuickControls2
+    Qt6::Widgets
+    Qt6::OpenGL
+    Qt6::OpenGLWidgets
+    Qt6::Svg
+    Qt6::Xml
+    OpenGL::GL
+    ${OpenCASCADE_FoundationClasses_LIBRARIES}
+    ${OpenCASCADE_ModelingData_LIBRARIES}
+    ${OpenCASCADE_ModelingAlgorithms_LIBRARIES}
+    ${OpenCASCADE_Visualization_LIBRARIES}
+    ${OpenCASCADE_ApplicationFramework_LIBRARIES}
+    ${OpenCASCADE_DataExchange_LIBRARIES}
+)
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(cadnc PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 
 qt_add_resources(cadnc "qml_resources"
     PREFIX "/"
@@ -165,12 +155,14 @@ qt_add_resources(cadnc "icon_resources"
     FILES ${ICON_FILES}
 )
 
-# ── Tests ─────────────────────────────────────────────────────────────────────
+if(CADNC_ENABLE_FREECAD_BACKEND)
+    message(STATUS "FreeCAD backend integration is enabled")
+    # add_subdirectory(freecad)
+endif()
+
 if(CADNC_BUILD_TESTS)
     enable_testing()
-    # TODO: Add test subdirectories
     # add_subdirectory(tests)
 endif()
 
-# ── Install Rules ─────────────────────────────────────────────────────────────
 install(TARGETS cadnc DESTINATION bin)

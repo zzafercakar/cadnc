@@ -1,0 +1,42 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"cmake.useCMakePresets": "always",
+		"cmake.configureOnOpen": true,
+		"cmake.configurePreset": "default",
+		"cmake.buildDirectory": "${workspaceFolder}/build",
+		"C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+		"C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+		"C_Cpp.default.intelliSenseMode": "linux-gcc-x64",
+		"C_Cpp.default.includePath": [
+			"${workspaceFolder}/build/generated",
+			"${workspaceFolder}/build/cadnc_autogen/include",
+			"${workspaceFolder}/adapter/inc",
+			"${workspaceFolder}/cam/inc",
+			"${workspaceFolder}/nesting/inc",
+			"${workspaceFolder}/util/inc",
+			"${workspaceFolder}/viewport/inc",
+			"${workspaceFolder}/ui/src",
+			"/usr/include/x86_64-linux-gnu/qt6",
+			"/usr/include/x86_64-linux-gnu/qt6/QtCore",
+			"/usr/include/x86_64-linux-gnu/qt6/QtGui",
+			"/usr/include/x86_64-linux-gnu/qt6/QtQuick",
+			"/usr/include/x86_64-linux-gnu/qt6/QtQml",
+			"/usr/include/x86_64-linux-gnu/qt6/QtQmlIntegration",
+			"/usr/include/x86_64-linux-gnu/qt6/QtNetwork",
+			"/usr/include/x86_64-linux-gnu/qt6/QtQmlModels",
+			"/usr/include/x86_64-linux-gnu/qt6/QtOpenGL",
+			"/usr/include/x86_64-linux-gnu/qt6/QtQuickControls2",
+			"/usr/include/x86_64-linux-gnu/qt6/QtWidgets",
+			"/usr/include/x86_64-linux-gnu/qt6/QtOpenGLWidgets",
+			"/usr/include/x86_64-linux-gnu/qt6/QtSvg",
+			"/usr/include/x86_64-linux-gnu/qt6/QtXml",
+			"/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++",
+			"/usr/include/opencascade"
+		]
+	}
+}

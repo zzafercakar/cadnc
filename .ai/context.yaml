@@ -4,60 +4,61 @@ project:
   version: 0.1.0
   language: C++17
   license: LGPL-2.1 (FreeCAD modules) + Proprietary (adapter, UI, CAM, nesting)
+  repo: https://github.com/zzafercakar/cadnc
+  origin: MilCAD projesinden mimari gecis (2026-04-12)
 
 architecture:
   pattern: "Layered: UI Shell → Adapter → FreeCAD Modules → OCCT Kernel"
-  backend: FreeCAD App/Part/Sketcher/PartDesign modules (LGPL)
-  kernel: OpenCASCADE (OCCT)
-  ui: Qt6 Quick / QML
-  cam: Custom module (ported from MilCAD)
-  nesting: Custom module (ported from MilCAD)
+  layers:
+    - name: UI Shell
+      tech: Qt6 Quick / QML
+      dir: ui/
+      description: Modern deklaratif arayuz, toolbar, panel, viewport
+    - name: Adapter
+      tech: C++17
+      dir: adapter/
+      description: Ince facade katmani — UI ile FreeCAD arasinda kopru
+      classes: [CadSession, CadDocument, SketchFacade, PartFacade, SelectionFacade, PropertyFacade]
+    - name: FreeCAD Backend
+      tech: C++17 + Python3
+      dir: freecad/
+      description: CAD islem motoru — document, property, constraint, feature
+      modules: [Base, App, Part/App, Sketcher/App, PartDesign/App]
+    - name: OCCT Kernel
+      tech: OpenCASCADE 7.6+
+      description: Geometri cekirdegi (FreeCAD tarafindan sarmalanir)
+  side_modules:
+    - name: CAM
+      dir: cam/
+      origin: MilCAD
+      description: Toolpath, G-Code, post-processor (CODESYS + Generic)
+    - name: Nesting
+      dir: nesting/
+      origin: MilCAD
+      description: Sheet nesting (BLF, BBox, NFP planlaniyor)
 
 tech_stack:
   language: C++17
   build: CMake 3.22+
-  ui_framework: Qt6 Quick / QML
+  ui_framework: Qt6 Quick / QML (6.2+)
   cad_backend: FreeCAD 1.2 App modules
   geometry_kernel: OpenCASCADE 7.6+
-  constraint_solver: planegcs (via FreeCAD Sketcher)
-  python: Python 3 (required by FreeCAD)
+  constraint_solver: planegcs (via FreeCAD Sketcher/App)
+  python: Python 3.x (required by FreeCAD — kabul edildi)
   testing: Google Test
-  ci: GitHub Actions
+  ci: GitHub Actions (self-hosted runner)
+  sanitizers: ASan, TSan, UBSan, Coverage (CMakePresets.json)
+  static_analysis: clang-tidy (.clang-tidy)
 
-modules:
-  freecad/Base:
-    description: Math, I/O, type system, Python integration
-    origin: FreeCAD
-  freecad/App:
-    description: Document, Property, Expression, Transaction system
-    origin: FreeCAD
-  freecad/Mod/Part/App:
-    description: TopoShape, Geometry, Part features
-    origin: FreeCAD
-  freecad/Mod/Sketcher/App:
-    description: SketchObject, Constraints, planegcs solver
-    origin: FreeCAD
-  freecad/Mod/PartDesign/App:
-    description: Pad, Pocket, Fillet, Chamfer, Pattern features
-    origin: FreeCAD
-  adapter:
-    description: Thin facade layer between UI and FreeCAD backend
-    origin: Custom
-  cam:
-    description: CAM toolpath generation, G-Code, post-processors
-    origin: MilCAD
-  nesting:
-    description: Sheet nesting algorithms (BLF, bounding box)
-    origin: MilCAD
-  ui:
-    description: QML-based UI shell
-    origin: Custom (new)
-  viewport:
-    description: 3D viewport (OCCT-based rendering)
-    origin: Custom (new)
+build:
+  configure: cmake -B build -S .
+  build: cmake --build build -j$(nproc)
+  run: DISPLAY=:0 QT_QPA_PLATFORM=xcb ./build/cadnc
+  test: ctest --test-dir build --output-on-failure
+  vscode: F5 ile "(Linux) Launch CADNC" config
 
 dependencies:
-  system:
+  system_packages:
     - python3-dev
     - libboost-all-dev
     - libxerces-c-dev
@@ -71,16 +72,101 @@ dependencies:
     - libgl-dev
     - libglx-dev
     - qt6-svg-dev
+    - libqt6svg6
+    - libtbb-dev
+    - libfontconfig1-dev
 
-build:
-  configure: cmake -B build -S .
-  build: cmake --build build -j$(nproc)
-  run: DISPLAY=:0 QT_QPA_PLATFORM=xcb ./build/cadnc
+modules:
+  freecad/Base:
+    files: 173
+    size: "~9,500 lines"
+    description: Math, I/O, type system, units, Python integration
+    key_classes: [Vector3D, Matrix, Rotation, Placement, Type, BaseClass, Console, Exception, Reader, Writer, Persistence, Quantity, Unit]
+  freecad/App:
+    files: 210
+    size: "~50,000 lines"
+    description: Document, Property, Expression, Transaction, Extension system
+    key_classes: [Document, DocumentObject, Property, PropertyStandard, PropertyLinks, PropertyGeo, PropertyContainer, PropertyExpressionEngine, Expression, Transactions, Extension, GeoFeature]
+  freecad/Mod/Part/App:
+    files: 286
+    size: "~250,000+ lines"
+    description: TopoShape, Geometry, Part features, Boolean ops, Import/Export
+    key_classes: [TopoShape, Geometry, Geometry2d, PartFeature, Part2DObject, Attacher, FaceMaker]
+    note: "Geometry.cpp tek basina ~246K satir (OCCT wrapper)"
+  freecad/Mod/Sketcher/App:
+    files: 58
+    size: "~48,000 lines"
+    description: "EN KRITIK MODUL — SketchObject, Constraints, planegcs solver"
+    key_classes: [SketchObject, Sketch, Constraint, PropertyConstraintList, GeometryFacade, GeoList]
+    operations: "trim, fillet, chamfer, split, extend, merge (SketchObjectOperations.cpp)"
+    solver: "planegcs/ — GCS.cpp (5818 satir), Constraints.cpp (3232), Geo.cpp (1147)"
+  freecad/Mod/PartDesign/App:
+    files: 80
+    size: "~20,000 lines"
+    description: Parametrik feature modelleme
+    key_classes: [Body, Feature, FeatureSketchBased, FeaturePad, FeaturePocket, FeatureRevolved, FeatureFillet, FeatureChamfer, FeatureDraft, FeatureThickness, FeatureLinearPattern, FeaturePolarPattern, FeatureMirrored, FeatureLoft, FeaturePipe, FeatureHelix, FeatureHole]
+  adapter:
+    files: 5
+    status: "Skeleton — TODOs"
+    description: "CadSession, CadDocument, SketchFacade, PartFacade"
+  cam:
+    files: 50
+    origin: MilCAD
+    description: "8 operation type, G-Code, CODESYS post-processor, simulation"
+    operations: [Facing, Profile, Pocket, Drill, Adaptive, Engrave, Helix, Slot]
+  nesting:
+    files: 11
+    origin: MilCAD
+    description: "BLF, BBox nesting. NFP planlaniyor."
+  ui:
+    files: 2
+    status: "Minimal shell"
+    description: "Main.qml placeholder"
+  viewport:
+    files: 0
+    status: "Bos — Faz 5'te olusturulacak"
+
+critical_rules:
+  - "UI kodu HICBIR FreeCAD header'i include etmemeli — sadece adapter/ uzerinden"
+  - "AIS_InteractiveContext islemleri SADECE render thread'de yapilmali"
+  - "Linux'ta EGL KULLANILMAMALI — OCCT GLX ile derlenmis"
+  - "OCCT kutuphaneleri tek tek listelenmeli, ${OpenCASCADE_LIBRARIES} yerine"
+  - "FreeCAD modullerinde minimum degisiklik — upstream uyumlulugu icin"
+  - "Python bagimliligi kabul edildi — cikarilmayacak"
 
 status:
-  phase: "Faz 0 — Project skeleton setup"
-  freecad_integration: "Not started — modules copied, build not wired"
-  adapter: "Skeleton only — facade headers with TODOs"
-  ui: "Minimal shell — Main.qml with placeholder viewport"
-  cam: "Ported from MilCAD — needs adapter integration"
-  nesting: "Ported from MilCAD — needs adapter integration"
+  current_phase: "Faz 0 TAMAMLANDI — Faz 1 baslayacak"
+  freecad_integration: "Moduller kopyalandi, build henuz wire edilmedi"
+  adapter: "Skeleton — 4 facade header + 1 source (TODOs)"
+  ui: "Minimal shell — Main.qml (model tree, viewport placeholder, properties)"
+  cam: "MilCAD'den tasindi — adapter entegrasyonu bekliyor"
+  nesting: "MilCAD'den tasindi — adapter entegrasyonu bekliyor"
+  viewport: "Henuz olusturulmadi — Faz 5"
+  next_action: "Faz 1 — freecad/CMakeLists.txt yazarak FreeCAD modullerini derlemek"
+
+reference_projects:
+  freecad:
+    path: "/home/embed/Downloads/FreeCAD-main-1-1/"
+    usage: "CAD backend kaynak kodu (moduller kopyalandi)"
+  freecad_alt:
+    path: "/home/embed/Downloads/FreeCAD-main/"
+    usage: "Ek referans"
+  librecad:
+    path: "/home/embed/Downloads/LibreCAD-master/"
+    usage: "2D CAD referansi (snap, DXF) — GPL, kod kopyalanmaz"
+  solvespace:
+    path: "/home/embed/Downloads/solvespace-master/"
+    usage: "Constraint solver davranisi — GPL, kod kopyalanmaz"
+  openscad:
+    path: "/home/embed/Downloads/openscad-master/"
+    usage: "Parametrik tasarim referansi — GPL"
+  luban:
+    path: "/home/embed/Downloads/Luban-main/"
+    usage: "NFP nesting referansi (JS)"
+  milcad:
+    path: "/home/embed/Dev/MilCAD/"
+    usage: "Onceki proje — CAM/nesting/icons tasindi, geri kalani referans"
+
+communication:
+  code_and_comments: English
+  user_communication: Turkish

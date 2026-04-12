@@ -12,6 +12,26 @@
 
 namespace MilCAD {
 
+namespace {
+
+GCodeBlock makeModalBlock(int lineNumber, int gCode)
+{
+    GCodeBlock block;
+    block.n = lineNumber;
+    block.g = gCode;
+    return block;
+}
+
+GCodeBlock makeMiscBlock(int lineNumber, int mCode)
+{
+    GCodeBlock block;
+    block.n = lineNumber;
+    block.m = mCode;
+    return block;
+}
+
+} // namespace
+
 // ─── PostProcessor base class default implementations ────────────────────────
 
 /**
@@ -85,22 +105,22 @@ std::vector<GCodeBlock> GenericPostProcessor::generatePreamble() const
     switch (flavor_) {
     case GenericPostFlavor::LinuxCNC:
         return {
-            GCodeBlock{.n = 10, .g = 90}, // absolute
-            GCodeBlock{.n = 20, .g = 21}, // mm
-            GCodeBlock{.n = 30, .g = 17}, // XY plane
-            GCodeBlock{.n = 40, .g = 94}  // feed/min
+            makeModalBlock(10, 90), // absolute
+            makeModalBlock(20, 21), // mm
+            makeModalBlock(30, 17), // XY plane
+            makeModalBlock(40, 94)  // feed/min
         };
     case GenericPostFlavor::Grbl:
         return {
-            GCodeBlock{.n = 10, .g = 90}, // absolute
-            GCodeBlock{.n = 20, .g = 21}  // mm
+            makeModalBlock(10, 90), // absolute
+            makeModalBlock(20, 21)  // mm
         };
     case GenericPostFlavor::Fanuc:
     default:
         return {
-            GCodeBlock{.n = 10, .g = 90}, // absolute
-            GCodeBlock{.n = 20, .g = 21}, // mm
-            GCodeBlock{.n = 30, .g = 17}  // XY plane
+            makeModalBlock(10, 90), // absolute
+            makeModalBlock(20, 21), // mm
+            makeModalBlock(30, 17)  // XY plane
         };
     }
 }
@@ -114,14 +134,10 @@ std::vector<GCodeBlock> GenericPostProcessor::generatePreamble() const
 std::vector<GCodeBlock> GenericPostProcessor::generatePostamble() const
 {
     if (flavor_ == GenericPostFlavor::Grbl) {
-        return {
-            GCodeBlock{.n = 9990, .m = 2}
-        };
+        return {makeMiscBlock(9990, 2)};
     }
 
-    return {
-        GCodeBlock{.n = 9990, .m = 30}
-    };
+    return {makeMiscBlock(9990, 30)};
 }
 
 /**
