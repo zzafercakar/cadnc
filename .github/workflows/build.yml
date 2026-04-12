@@ -1,0 +1,33 @@
+name: Build & Test CADNC
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    name: Build & Test (Self-Hosted)
+    runs-on: [self-hosted, linux, milcad]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build (limited cores to protect Sodoo)
+        run: nice -n 10 cmake --build build -j4
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Build summary
+        if: always()
+        run: |
+          echo "## Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **Compiler:** $(g++ --version | head -1)" >> $GITHUB_STEP_SUMMARY
+          echo "- **CMake:** $(cmake --version | head -1)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Test results:**" >> $GITHUB_STEP_SUMMARY
+          ctest --test-dir build --output-on-failure 2>&1 | tail -3 >> $GITHUB_STEP_SUMMARY || true
