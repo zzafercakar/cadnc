@@ -1,101 +1,52 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
+# FreeCADBase — core library: math, I/O, type system, units, Python integration
 
 add_library(FreeCADBase SHARED)
 
-if(WIN32)
-    add_definitions(-DFCBase)
-    add_definitions(-DPYCXX_DLL)
-    add_definitions(-DBOOST_DYN_LINK)
-    add_definitions(-DZIPIOS_UTF8)
-endif(WIN32)
+# ---------------------------------------------------------------------------
+# Compile definitions
+# ---------------------------------------------------------------------------
+# FreeCADBase_EXPORTS triggers BaseExport macro in FCGlobal.h (dllexport on Windows)
+target_compile_definitions(FreeCADBase PRIVATE FreeCADBase_EXPORTS QT_NO_KEYWORDS)
+# Keep Py::Exception 2-arg constructors (PyObject*, string) from Exception.hxx
+target_compile_definitions(FreeCADBase PUBLIC PYCXX_6_2_COMPATIBILITY)
+# zipios++ needs these to use modern std::ostringstream instead of deprecated ostrstream
+target_compile_definitions(FreeCADBase PRIVATE HAVE_STD_IOSTREAM=1 USE_STD_IOSTREAM=1)
 
-if(BUILD_TRACY_FRAME_PROFILER)
-    add_definitions(-DBUILD_TRACY_FRAME_PROFILER)
-endif()
-
-if(FREECAD_RELEASE_SEH)
-    add_definitions(-DHAVE_SEH)
-endif(FREECAD_RELEASE_SEH)
-
-target_include_directories(
-    FreeCADBase
+# ---------------------------------------------------------------------------
+# Include directories
+# ---------------------------------------------------------------------------
+target_include_directories(FreeCADBase
+    PUBLIC
+        # So downstream can do #include <Base/Vector3D.h>
+        "${FREECAD_SRC_DIR}"
+        # FCConfig.h and FCGlobal.h live in freecad/
+        "${FREECAD_SRC_DIR}"
     PRIVATE
-    ${CMAKE_BINARY_DIR}/src
-    ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_BINARY_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+        "${CMAKE_CURRENT_BINARY_DIR}"
 )
 
-target_include_directories(
-    FreeCADBase
-    SYSTEM
-    PUBLIC
+target_include_directories(FreeCADBase SYSTEM PUBLIC
     ${Boost_INCLUDE_DIRS}
     ${PYCXX_INCLUDE_DIRS}
     ${Python3_INCLUDE_DIRS}
     ${XercesC_INCLUDE_DIRS}
     ${ZLIB_INCLUDE_DIR}
     ${ZIPIOS_INCLUDES}
-    ${ICU_INCLUDE_DIRS}
 )
 
-if(MSVC)
-    set(FreeCADBase_LIBS
-        ${Boost_LIBRARIES}
-        ${XercesC_LIBRARIES}
-        ${ZLIB_LIBRARIES}
-        ${ICU_LIBRARIES}
-        debug MSVCRTD.LIB
-        debug MSVCPRTD.LIB
-        optimized MSVCRT.LIB
-        optimized MSVCPRT.LIB
-        Rpcrt4.lib
-        version.lib
-    )
-
-    #Universal C runtime introduced in VS 2015 (cl version 19)
-    if (NOT (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "19"))
-        list(APPEND FreeCADBase_LIBS
-            debug vcruntimed.lib
-            debug ucrtd.lib
-            debug concrtd.lib
-            optimized vcruntime.lib
-            optimized ucrt.lib
-            optimized concrt.lib
-        )
-    endif()
-elseif(MINGW)
-    set(FreeCADBase_LIBS
-        ${XercesC_LIBRARIES}
-        ${Boost_LIBRARIES}
-        ${ZLIB_LIBRARIES}
-        ${ICU_LIBRARIES}
-        Rpcrt4.lib
-    )
-else(MSVC)
-    set(FreeCADBase_LIBS
-        ${XercesC_LIBRARIES}
-        ${Boost_LIBRARIES}
-        ${ZLIB_LIBRARIES}
-        ${ICU_LIBRARIES}
-    )
-endif(MSVC)
-
-if(BUILD_TRACY_FRAME_PROFILER)
-    list(APPEND FreeCADBase_LIBS TracyClient)
+# ICU is optional
+if(ICU_FOUND)
+    target_include_directories(FreeCADBase SYSTEM PUBLIC ${ICU_INCLUDE_DIRS})
 endif()
 
-list(APPEND FreeCADBase_LIBS libfastsignals fmt::fmt)
-
-if (BUILD_DYNAMIC_LINK_PYTHON)
-    list(APPEND FreeCADBase_LIBS ${Python3_LIBRARIES})
-endif (BUILD_DYNAMIC_LINK_PYTHON)
-
-# needed for OpenSUSE
-if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
-    list(APPEND FreeCADBase_LIBS -lutil -ldl)
-endif()
-
+# ---------------------------------------------------------------------------
+# Pre-generated Python binding files
+# ---------------------------------------------------------------------------
+# These were generated from .pyi files using FreeCAD's generate.py tool.
+# They live in the source tree to avoid needing the tool at build time.
+set(GENERATED_PY_SOURCES "")
 generate_from_py(Type)
 generate_from_py(BaseClass)
 generate_from_py(BoundBox)
@@ -109,67 +60,14 @@ generate_from_py(Axis)
 generate_from_py(Unit)
 generate_from_py(Quantity)
 generate_from_py(Precision)
+
+# Parameter.inl — XSD schema embedded as C++ string
 generate_from_any(Parameter.xsd Parameter.inl xmlSchemeString)
 
-if(SWIG_FOUND)
-    # Create the file swigpyrun.hh and then compare with the file swigpyrun.h.
-    # If the files are different or if swigpyrun.h doesn't exist then copy swigpyrun.hh.
-    # This is to avoid to having to build the target each time cmake configure is executed.
-    execute_process(COMMAND ${SWIG_EXECUTABLE} -python -external-runtime ${CMAKE_CURRENT_BINARY_DIR}/swigpyrun.hh)
-
-    fc_copy_file_if_different(
-        "${CMAKE_CURRENT_BINARY_DIR}/swigpyrun.hh"
-        "${CMAKE_CURRENT_BINARY_DIR}/swigpyrun.h"
-    )
-    add_definitions(-DHAVE_SWIG=1)
-endif(SWIG_FOUND)
-
-SOURCE_GROUP("pycxx" FILES ${PYCXX_SOURCES})
-
-SET(FreeCADBase_Pyi_SRCS
-    Axis.pyi
-    BaseClass.pyi
-    BoundBox.pyi
-    CoordinateSystem.pyi
-    Matrix.pyi
-    Persistence.pyi
-    Placement.pyi
-    Rotation.pyi
-    Vector.pyi
-    Quantity.pyi
-    Type.pyi
-    Unit.pyi
-    Precision.pyi
-)
-SOURCE_GROUP("Pyi" FILES ${FreeCADBase_Pyi_SRCS})
-
-SET(FreeCADBase_UNITAPI_SRCS
-    UnitsApi.cpp
-    UnitsApiPy.cpp
-    UnitsApi.h
-    UnitsConvData.h
-    UnitsSchema.h
-    UnitsSchema.cpp
-    UnitsSchemas.cpp
-    UnitsSchemas.h
-    UnitsSchemasData.h
-    UnitsSchemasSpecs.h
-    Quantity.h
-    Quantity.cpp
-    QuantityPyImp.cpp
-    Quantity.l
-    Quantity.y
-    Unit.h
-    Unit.cpp
-    UnitPyImp.cpp
-)
-SOURCE_GROUP("Units" FILES ${FreeCADBase_UNITAPI_SRCS})
-
-SET(SWIG_SRCS
-    swigpyrun.cpp
-)
-
-SET(FreeCADBase_CPP_SRCS
+# ---------------------------------------------------------------------------
+# Source files
+# ---------------------------------------------------------------------------
+set(FreeCADBase_CPP_SRCS
     Axis.cpp
     AxisPyImp.cpp
     Base64.cpp
@@ -196,7 +94,6 @@ SET(FreeCADBase_CPP_SRCS
     Matrix.cpp
     MatrixPyImp.cpp
     Observer.cpp
-    Parameter.xsd
     Parameter.cpp
     ParameterPy.cpp
     Persistence.cpp
@@ -217,7 +114,7 @@ SET(FreeCADBase_CPP_SRCS
     SmartPtrPy.cpp
     Stream.cpp
     Swap.cpp
-    ${SWIG_SRCS}
+    swigpyrun.cpp
     SystemHandler.cpp
     Tools.cpp
     Tools2D.cpp
@@ -236,125 +133,77 @@ SET(FreeCADBase_CPP_SRCS
     ZipHeader.cpp
 )
 
-SET(SWIG_HEADERS
-    swigpyrun.inl
+set(FreeCADBase_UNITAPI_SRCS
+    UnitsApi.cpp
+    UnitsApiPy.cpp
+    UnitsSchema.cpp
+    UnitsSchemas.cpp
+    Quantity.cpp
+    QuantityPyImp.cpp
+    Unit.cpp
+    UnitPyImp.cpp
 )
 
-SET(FreeCADBase_HPP_SRCS
-    Axis.h
-    Base64.h
-    Base64Filter.h
-    BaseClass.h
-    BindingManager.h
-    Bitmask.h
-    BoundBox.h
-    Builder3D.h
-    Console.h
-    ConsoleObserver.h
-    Converter.h
-    Color.h
-    CoordinateSystem.h
-    DualNumber.h
-    DualQuaternion.h
-    Exception.h
-    ExceptionFactory.h
-    Factory.h
-    FileInfo.h
-    FileLock.h
-    GeometryPyCXX.h
-    Handle.h
-    InputSource.h
-    Interpreter.h
-    Matrix.h
-    Observer.h
-    Parameter.h
-    Persistence.h
-    Placement.h
-    Precision.h
-    ProgressIndicatorPy.h
-    ProgressIndicator.h
-    PyExport.h
-    PyObjectBase.h
-    PyWrapParseTupleAndKeywords.h
-    PythonTypeExt.h
-    Reader.h
-    Rotation.h
-    ServiceProvider.h
-    Sequencer.h
-    SmartPtrPy.h
-    Stream.h
-    Swap.h
-    ${SWIG_HEADERS}
-    SystemHandler.h
-    TimeInfo.h
-    Tools.h
-    Tools2D.h
-    Tools3D.h
-    Translation.h
-    Translate.h
-    Type.h
-    UnlimitedUnsigned.h
-    UniqueNameManager.h
-    Uuid.h
-    Vector3D.h
-    ViewProj.h
-    Writer.h
-    XMLTools.h
-    ZipHeader.h
-)
-
-SET(FreeCADBase_SRCS
+# Collect all sources
+set(FreeCADBase_ALL_SRCS
     ${PYCXX_SOURCES}
     ${FreeCADBase_CPP_SRCS}
-    ${FreeCADBase_HPP_SRCS}
-    ${FreeCADBase_Pyi_SRCS}
     ${FreeCADBase_UNITAPI_SRCS}
+    ${GENERATED_PY_SOURCES}
+    ${zipios_SRCS}
     PyTools.c
-    PyTools.h
-    PreCompiled.h
 )
 
-IF (MSVC)
-    SET(FreeCADBase_SRCS
-        ${FreeCADBase_SRCS}
-        StackWalker.cpp
-        StackWalker.h
-    )
-ENDIF(MSVC)
+target_sources(FreeCADBase PRIVATE ${FreeCADBase_ALL_SRCS})
 
-if(FREECAD_USE_EXTERNAL_ZIPIOS)
-    list(APPEND FreeCADBase_LIBS ${ZIPIOS_LIBRARY})
-else()
-    list(APPEND FreeCADBase_SRCS ${zipios_SRCS})
-    SOURCE_GROUP("zipios" FILES ${zipios_SRCS})
+# ---------------------------------------------------------------------------
+# Link libraries
+# ---------------------------------------------------------------------------
+set(FreeCADBase_LIBS
+    Qt6::Core
+    ${XercesC_LIBRARIES}
+    ${Boost_LIBRARIES}
+    ${ZLIB_LIBRARIES}
+    Python3::Python
+    libfastsignals
+    fmt::fmt
+)
+
+if(ICU_FOUND)
+    list(APPEND FreeCADBase_LIBS ${ICU_LIBRARIES})
 endif()
 
-if(FREECAD_USE_PCH)
-    target_precompile_headers(FreeCADBase PRIVATE
-        $<$<COMPILE_LANGUAGE:CXX>:"${CMAKE_CURRENT_LIST_DIR}/PreCompiled.h">
-    )
-endif(FREECAD_USE_PCH)
-
-target_sources(FreeCADBase PRIVATE ${FreeCADBase_SRCS})
-target_link_libraries(FreeCADBase ${FreeCADBase_LIBS})
-
-if (MSVC)
-    target_compile_definitions(FreeCADBase PRIVATE WIN32_LEAN_AND_MEAN)
+# Linux-specific: util and dl needed for Python embedding
+if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+    list(APPEND FreeCADBase_LIBS -lutil -ldl)
 endif()
 
-if (FREECAD_WARN_ERROR)
-    target_compile_warn_error(FreeCADBase)
+target_link_libraries(FreeCADBase PUBLIC ${FreeCADBase_LIBS})
+
+# ---------------------------------------------------------------------------
+# Compiler settings
+# ---------------------------------------------------------------------------
+target_compile_features(FreeCADBase PUBLIC cxx_std_20)
+set_target_properties(FreeCADBase PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+    # Output to build/lib/ so all .so files are together
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+)
+
+# Suppress warnings in FreeCAD code (upstream — we don't modify)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(FreeCADBase PRIVATE
+        -Wno-unused-parameter
+        -Wno-missing-field-initializers
+        -Wno-deprecated-declarations
+        -Wno-sign-compare
+        -Wno-write-strings
+    )
 endif()
 
-SET_BIN_DIR(FreeCADBase FreeCADBase)
-
-if(WIN32)
-    INSTALL(TARGETS FreeCADBase
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    )
-else(WIN32)
-    INSTALL(TARGETS FreeCADBase
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    )
-endif(WIN32)
+# ---------------------------------------------------------------------------
+# Install
+# ---------------------------------------------------------------------------
+install(TARGETS FreeCADBase
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)

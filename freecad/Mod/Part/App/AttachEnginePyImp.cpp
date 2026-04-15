@@ -111,7 +111,7 @@ Py::String AttachEnginePy::getAttacherType() const
 #define ATTACHERPY_STDCATCH_ATTR \
     catch (Standard_Failure & e) \
     { \
-        throw Py::Exception(Part::PartExceptionOCCError, e.GetMessageString()); \
+        throw Py::RuntimeError(std::string(e.GetMessageString())); \
     } \
     catch (Base::Exception & e) \
     { \

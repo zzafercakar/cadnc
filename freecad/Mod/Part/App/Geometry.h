@@ -1435,6 +1435,8 @@ PartExport std::unique_ptr<GeomCurve> makeFromCurveAdaptor(const Adaptor3d_Curve
  * @param fontFile The absolute path to the TTF, OTF, etc., font file.
  * @param tracking Additional spacing between characters.
  */
+// CADNC: text-to-geometry requires FreeType + harfbuzz
+#ifdef HAVE_FREETYPE
 PartExport void transformAndConvertToGeometry(
     std::vector<std::unique_ptr<Part::Geometry>>& geos,
     const std::vector<TopoDS_Shape>& baseShapes,
@@ -1449,4 +1451,5 @@ PartExport std::vector<TopoDS_Shape> makeTextWires(
     double height = 1.0,
     double tracking = 0.0
 );
+#endif  // HAVE_FREETYPE
 }  // namespace Part

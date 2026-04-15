@@ -1,191 +1,62 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-include_directories(
-    SYSTEM
-    ${CMAKE_SOURCE_DIR}/src/3rdParty/json/single_include/nlohmann/
-)
+# Sketcher — SketchObject, Constraints, planegcs solver
 
 add_library(Sketcher SHARED)
 
-# Uncomment this code if you want to try Eigen's multithread
-#find_package(OpenMP)
-#if (OPENMP_FOUND)
-#    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-#    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-#endif()
+target_compile_definitions(Sketcher PRIVATE Sketcher_EXPORTS QT_NO_KEYWORDS)
 
-# set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DEIGEN_NO_DEBUG") # Necessary to avoid SparseQR crash with Eigen 3.2 due to a wrong assertion
-
-target_include_directories(
-    Sketcher
-    PRIVATE
-    ${CMAKE_BINARY_DIR}
-    ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_BINARY_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/..
-    ${CMAKE_CURRENT_BINARY_DIR}/..
+target_include_directories(Sketcher
+    PUBLIC "${FREECAD_SRC_DIR}"
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}"
 )
-
-target_include_directories(
-    Sketcher
-    SYSTEM
-    PUBLIC
+target_include_directories(Sketcher SYSTEM PRIVATE
+    ${OpenCASCADE_INCLUDE_DIR}
     ${EIGEN3_INCLUDE_DIR}
+    "${FREECAD_SRC_DIR}/3rdParty"
+    "${FREECAD_SRC_DIR}/3rdParty/json/single_include/nlohmann"
 )
 
-set(Sketcher_LIBS
+# Pre-generated Python bindings
+set(GENERATED_PY_SOURCES "")
+file(GLOB _sketch_pyi CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.pyi")
+foreach(_pyi ${_sketch_pyi})
+    get_filename_component(_name ${_pyi} NAME_WE)
+    generate_from_py(${_name})
+endforeach()
+
+# Source files
+file(GLOB Sketcher_MAIN_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
+file(GLOB Sketcher_GCS_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/planegcs/*.cpp")
+
+# Exclude generated *Py.cpp (included via *PyImp.cpp)
+set(_generated_py_cpps "")
+foreach(_pyi ${_sketch_pyi})
+    get_filename_component(_name ${_pyi} NAME_WE)
+    list(APPEND _generated_py_cpps "${CMAKE_CURRENT_SOURCE_DIR}/${_name}Py.cpp")
+endforeach()
+set(Sketcher_ALL_SRCS ${Sketcher_MAIN_SRCS} ${Sketcher_GCS_SRCS})
+list(REMOVE_ITEM Sketcher_ALL_SRCS ${_generated_py_cpps})
+
+target_sources(Sketcher PRIVATE ${Sketcher_ALL_SRCS} ${GENERATED_PY_SOURCES})
+
+target_link_libraries(Sketcher PUBLIC
     Part
     FreeCADApp
+    Eigen3::Eigen
+    fmt::fmt
 )
 
-generate_from_py(SketchObjectSF)
-generate_from_py(SketchObject)
-generate_from_py(SketchGeometryExtension)
-generate_from_py(ExternalGeometryExtension)
-generate_from_py(GeometryFacade)
-generate_from_py(ExternalGeometryFacade)
-generate_from_py(Constraint)
-generate_from_py(Sketch)
-
-
-SET(Properties_SRCS
-    PropertyConstraintList.cpp
-    PropertyConstraintList.h
-)
-SOURCE_GROUP("Properties" FILES ${Properties_SRCS})
-
-
-SET(Features_SRCS
-    SketchObjectSF.cpp
-    SketchObjectSF.h
-    SketchGeometry.cpp
-    SketchGeometry.h
-    SketchGeometryExtension.cpp
-    SketchGeometryExtension.h
-    ExternalGeometryExtension.cpp
-    ExternalGeometryExtension.h
-    SolverGeometryExtension.cpp
-    SolverGeometryExtension.h
-    SketchObject.cpp
-    SketchObject.h
-    SketchObjectGeometry.cpp
-    SketchObjectExternal.cpp
-    SketchObjectConstraints.cpp
-    SketchObjectOperations.cpp
-    SketchAnalysis.h
-    SketchAnalysis.cpp
-    Analyse.h
-    PythonConverter.cpp
-    PythonConverter.h
-)
-SOURCE_GROUP("Features" FILES ${Features_SRCS})
-
-SET(Datatypes_SRCS
-    Constraint.cpp
-    Constraint.h
-    Sketch.cpp
-    Sketch.h
-    GeoList.h
-    GeoList.cpp
-    GeometryFacade.cpp
-    GeometryFacade.h
-    ExternalGeometryFacade.cpp
-    ExternalGeometryFacade.h
-    GeoEnum.cpp
-    GeoEnum.h
-)
-SOURCE_GROUP("Datatypes" FILES ${Datatypes_SRCS})
-
-SET(Python_SRCS
-    SketchObjectSF.pyi
-    SketchObjectSFPyImp.cpp
-    SketchObject.pyi
-    SketchObjectPyImp.cpp
-    SketchGeometryExtension.pyi
-    SketchGeometryExtensionPyImp.cpp
-    ExternalGeometryExtension.pyi
-    ExternalGeometryExtensionPyImp.cpp
-    GeometryFacade.pyi
-    GeometryFacadePyImp.cpp
-    ExternalGeometryFacade.pyi
-    ExternalGeometryFacadePyImp.cpp
-    ConstraintPyImp.cpp
-    Constraint.pyi
-    Sketch.pyi
-    SketchPyImp.cpp
-)
-SOURCE_GROUP("Python" FILES ${Python_SRCS})
-
-
-SET(PlaneGCS_SRCS
-    planegcs/GCS.cpp
-    planegcs/GCS.h
-    planegcs/Util.h
-    planegcs/Geo.cpp
-    planegcs/Geo.h
-    planegcs/Constraints.cpp
-    planegcs/Constraints.h
-    planegcs/SubSystem.cpp
-    planegcs/SubSystem.h
-    planegcs/qp_eq.cpp
-    planegcs/qp_eq.h
-)
-SOURCE_GROUP("PlaneGCS" FILES ${PlaneGCS_SRCS})
-
-SET(SketchModule_SRCS
-    AppSketcher.cpp
-    AppSketcherPy.cpp
-    PreCompiled.h
-    Measure.cpp
-    Measure.h
-)
-SOURCE_GROUP("Module" FILES ${SketchModule_SRCS})
-
-SET(Sketcher_SRCS
-    ${Features_SRCS}
-    ${PlaneGCS_SRCS}
-    ${SketchModule_SRCS}
-    ${Python_SRCS}
-    ${Properties_SRCS}
-    ${Datatypes_SRCS}
+target_compile_features(Sketcher PUBLIC cxx_std_20)
+set_target_properties(Sketcher PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
 )
 
-SET(Sketcher_PCH_SRCS
-    ${Features_SRCS}
-    ${SketchModule_SRCS}
-    ${Python_SRCS}
-    ${Properties_SRCS}
-    ${Datatypes_SRCS}
-)
-
-target_sources(Sketcher PRIVATE ${Sketcher_SRCS})
-target_link_libraries(Sketcher ${Sketcher_LIBS})
-
-if (MSVC)
-    target_compile_options(Sketcher PRIVATE /wd4251)
-endif()
-
-if (FREECAD_WARN_ERROR)
-    target_compile_warn_error(Sketcher)
-endif()
-
-if(FREECAD_USE_PCH)
-    target_precompile_headers(Sketcher PRIVATE
-            $<$<COMPILE_LANGUAGE:CXX>:"${CMAKE_CURRENT_LIST_DIR}/PreCompiled.h">
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(Sketcher PRIVATE
+        -Wno-unused-parameter -Wno-missing-field-initializers
+        -Wno-deprecated-declarations -Wno-sign-compare
     )
-endif(FREECAD_USE_PCH)
+endif()
 
-# Suppress some very long Eigen3 warnings of older versions
-if (EIGEN3_NO_DEPRECATED_COPY)
-    set_source_files_properties(
-        planegcs/GCS.cpp
-        planegcs/SubSystem.cpp
-        planegcs/qp_eq.cpp
-        PROPERTIES COMPILE_FLAGS ${EIGEN3_NO_DEPRECATED_COPY})
-endif ()
-
-
-SET_BIN_DIR(Sketcher Sketcher /Mod/Sketcher)
-SET_PYTHON_PREFIX_SUFFIX(Sketcher)
-
-INSTALL(TARGETS Sketcher DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(TARGETS Sketcher LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})

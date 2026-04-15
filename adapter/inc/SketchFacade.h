@@ -9,27 +9,131 @@
  * without exposing FreeCAD internals to the UI.
  */
 
+#include <memory>
+#include <string>
+#include <vector>
+
 namespace CADNC {
+
+/// Simple 2D point for passing geometry data across the facade boundary
+struct Point2D {
+    double x = 0.0;
+    double y = 0.0;
+};
+
+/// Constraint type enum — mirrors Sketcher::ConstraintType without exposing it
+enum class ConstraintType {
+    Coincident,
+    Horizontal,
+    Vertical,
+    Parallel,
+    Perpendicular,
+    Tangent,
+    Equal,
+    Symmetric,
+    Distance,
+    DistanceX,
+    DistanceY,
+    Angle,
+    Radius,
+    Diameter,
+    PointOnObject,
+    Fixed,
+};
+
+/// Geometry info returned from the sketch (no OCCT types leak out)
+struct GeoInfo {
+    int id = -1;
+    std::string type;       // "Line", "Circle", "Arc", "Point"
+    bool construction = false;
+
+    // Line endpoints
+    Point2D start, end;
+
+    // Circle/Arc center + radius
+    Point2D center;
+    double radius = 0.0;
+
+    // Arc angles (radians)
+    double startAngle = 0.0;
+    double endAngle = 0.0;
+};
+
+/// Constraint info returned from the sketch
+struct ConstraintInfo {
+    int id = -1;
+    ConstraintType type = ConstraintType::Coincident;
+    double value = 0.0;
+    bool isDriving = true;
+    int firstGeoId = -1;
+    int secondGeoId = -1;
+};
+
+/// Solve result from the constraint solver
+enum class SolveResult {
+    Solved,         // fully constrained
+    UnderConstrained,
+    OverConstrained,
+    Conflicting,
+    Redundant,
+    SolverError,
+};
 
 class SketchFacade {
 public:
-    SketchFacade();
+    explicit SketchFacade(void* sketchObject); // opaque — SketchObject*
     ~SketchFacade();
 
-    // Sketch lifecycle
-    // TODO: createSketch(), closeSketch()
+    // non-copyable
+    SketchFacade(const SketchFacade&) = delete;
+    SketchFacade& operator=(const SketchFacade&) = delete;
 
-    // Geometry operations
-    // TODO: addLine(), addCircle(), addArc(), addRectangle(), addSpline()
+    // ── Geometry operations ─────────────────────────────────────────
+    int addLine(Point2D p1, Point2D p2, bool construction = false);
+    int addCircle(Point2D center, double radius, bool construction = false);
+    int addArc(Point2D center, double radius,
+               double startAngle, double endAngle, bool construction = false);
+    int addRectangle(Point2D p1, Point2D p2, bool construction = false);
+    int addPoint(Point2D p, bool construction = false);
 
-    // Constraints
-    // TODO: addDimensionConstraint(), addCoincidentConstraint(), etc.
+    void removeGeometry(int geoId);
 
-    // Sketch tools
-    // TODO: trim(), fillet(), chamfer(), split(), extend()
+    // ── Constraints ─────────────────────────────────────────────────
+    int addConstraint(ConstraintType type, int firstGeo, int secondGeo = -1,
+                      double value = 0.0);
+    int addCoincident(int geo1, int pos1, int geo2, int pos2);
+    int addDistance(int geoId, double distance);
+    int addRadius(int geoId, double radius);
+    int addAngle(int geo1, int geo2, double angle);
+    int addHorizontal(int geoId);
+    int addVertical(int geoId);
+    int addFixed(int geoId);
 
-    // Solver
-    // TODO: solve(), getDOF()
+    void removeConstraint(int constraintId);
+    void setDatum(int constraintId, double value);
+    void toggleDriving(int constraintId);
+
+    // ── Sketch tools ────────────────────────────────────────────────
+    int trim(int geoId, Point2D point);
+    int fillet(int geoId1, int geoId2, double radius);
+    int chamfer(int geoId1, int geoId2, double size);
+
+    // ── Solver ──────────────────────────────────────────────────────
+    SolveResult solve();
+
+    // ── Query ───────────────────────────────────────────────────────
+    std::vector<GeoInfo> geometry() const;
+    std::vector<ConstraintInfo> constraints() const;
+    int geometryCount() const;
+    int constraintCount() const;
+
+    // ── Lifecycle ───────────────────────────────────────────────────
+    /// Close the sketch (validates, updates shape)
+    void close();
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
 };
 
 } // namespace CADNC

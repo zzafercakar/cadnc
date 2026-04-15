@@ -1,168 +1,58 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
+# PartDesign — parametric feature modeling (Pad, Pocket, Revolution, Fillet, etc.)
 
-include_directories(
-    SYSTEM
-    ${CMAKE_SOURCE_DIR}/src/3rdParty/json/single_include/nlohmann/
+add_library(PartDesign SHARED)
+
+target_compile_definitions(PartDesign PRIVATE PartDesign_EXPORTS QT_NO_KEYWORDS)
+
+target_include_directories(PartDesign
+    PUBLIC "${FREECAD_SRC_DIR}"
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}"
+)
+target_include_directories(PartDesign SYSTEM PRIVATE
+    ${OpenCASCADE_INCLUDE_DIR}
+    "${FREECAD_SRC_DIR}/3rdParty/json/single_include/nlohmann"
 )
 
-generate_from_py(Body)
-generate_from_py(Feature)
+# Pre-generated Python bindings
+set(GENERATED_PY_SOURCES "")
+file(GLOB _pd_pyi CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.pyi")
+foreach(_pyi ${_pd_pyi})
+    get_filename_component(_name ${_pyi} NAME_WE)
+    generate_from_py(${_name})
+endforeach()
 
+# Source files
+file(GLOB PartDesign_ALL_SRCS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
 
-set(PartDesign_LIBS
-    ${OCC_LIBRARIES}
-    ${OCC_DEBUG_LIBRARIES}
+# Exclude generated *Py.cpp
+set(_generated_py_cpps "")
+foreach(_pyi ${_pd_pyi})
+    get_filename_component(_name ${_pyi} NAME_WE)
+    list(APPEND _generated_py_cpps "${CMAKE_CURRENT_SOURCE_DIR}/${_name}Py.cpp")
+endforeach()
+list(REMOVE_ITEM PartDesign_ALL_SRCS ${_generated_py_cpps})
+
+target_sources(PartDesign PRIVATE ${PartDesign_ALL_SRCS} ${GENERATED_PY_SOURCES})
+
+target_link_libraries(PartDesign PUBLIC
     Part
+    Sketcher
     FreeCADApp
+    fmt::fmt
 )
 
-SET(Features_SRCS
-    Feature.cpp
-    Feature.h
-    FeatureSolid.cpp
-    FeatureSolid.h
-    Body.cpp
-    Body.h
-    FeatureBase.h
-    FeatureBase.cpp
-)
-SOURCE_GROUP("Features" FILES ${Features_SRCS})
-
-SET(DatumFeatures_SRCS
-    ShapeBinder.h
-    ShapeBinder.cpp
-    DatumPlane.cpp
-    DatumPlane.h
-    DatumLine.cpp
-    DatumLine.h
-    DatumPoint.cpp
-    DatumPoint.h
-    DatumCS.h
-    DatumCS.cpp
-)
-SOURCE_GROUP("DatumFeatures" FILES ${DatumFeatures_SRCS})
-
-SET(FeaturesTransformed_SRCS
-    FeatureTransformed.h
-    FeatureTransformed.cpp
-    FeatureMirrored.h
-    FeatureMirrored.cpp
-    FeatureLinearPattern.h
-    FeatureLinearPattern.cpp
-    FeaturePolarPattern.h
-    FeaturePolarPattern.cpp
-    FeatureScaled.h
-    FeatureScaled.cpp
-    FeatureMultiTransform.h
-    FeatureMultiTransform.cpp
-)
-SOURCE_GROUP("FeaturesTransformed" FILES ${FeaturesTransformed_SRCS})
-
-SET(FeaturesDressUp_SRCS
-    FeatureDressUp.cpp
-    FeatureDressUp.h
-    FeatureFillet.cpp
-    FeatureFillet.h
-    FeatureChamfer.cpp
-    FeatureChamfer.h
-    FeatureDraft.cpp
-    FeatureDraft.h
-    FeatureThickness.cpp
-    FeatureThickness.h
-)
-SOURCE_GROUP("DressUpFeatures" FILES ${FeaturesDressUp_SRCS})
-
-SET(FeaturesSketchBased_SRCS
-    FeatureExtrude.cpp
-    FeatureExtrude.h
-    FeatureSketchBased.cpp
-    FeatureSketchBased.h
-    FeaturePad.cpp
-    FeaturePad.h
-    FeaturePocket.cpp
-    FeaturePocket.h
-    FeatureRevolved.cpp
-    FeatureRevolved.h
-    FeatureRevolution.cpp
-    FeatureRevolution.h
-    FeatureGroove.cpp
-    FeatureGroove.h
-    FeatureRefine.cpp
-    FeatureRefine.h
-    FeatureAddSub.cpp
-    FeatureAddSub.h
-    FeatureHole.h
-    FeatureHole.cpp
-    FeatureBoolean.h
-    FeatureBoolean.cpp
-    FeaturePrimitive.h
-    FeaturePrimitive.cpp
-    FeaturePipe.h
-    FeaturePipe.cpp
-    FeatureLoft.h
-    FeatureLoft.cpp
-    FeatureHelix.h
-    FeatureHelix.cpp
+target_compile_features(PartDesign PUBLIC cxx_std_20)
+set_target_properties(PartDesign PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
 )
 
-SOURCE_GROUP("SketchBasedFeatures" FILES ${FeaturesSketchBased_SRCS})
-
-SET(Module_SRCS
-    AppPartDesign.cpp
-    AppPartDesignPy.cpp
-    PreCompiled.h
-    Measure.cpp
-    Measure.h
-)
-SOURCE_GROUP("Module" FILES ${Module_SRCS})
-
-
-SET(Python_SRCS
-    Body.pyi
-    BodyPyImp.cpp
-    Feature.pyi
-    FeaturePyImp.cpp
-)
-SOURCE_GROUP("Python" FILES ${Python_SRCS})
-
-SET(PartDesign_SRCS
-    ${Features_SRCS}
-    ${DatumFeatures_SRCS}
-    ${FeaturesTransformed_SRCS}
-    ${FeaturesSketchBased_SRCS}
-    ${FeaturesDressUp_SRCS}
-    ${Module_SRCS}
-    ${Python_SRCS}
-)
-
-add_library(PartDesign SHARED ${PartDesign_SRCS})
-target_include_directories(
-    PartDesign
-    PRIVATE
-    ${CMAKE_BINARY_DIR}
-    ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_BINARY_DIR}/src
-    ${CMAKE_CURRENT_BINARY_DIR}
-)
-
-target_link_directories(PartDesign PUBLIC ${OCC_LIBRARY_DIR})
-target_link_libraries(PartDesign ${PartDesign_LIBS})
-
-if (MSVC)
-    target_compile_options(PartDesign PRIVATE /wd4275)
-endif()
-
-if (FREECAD_WARN_ERROR)
-    target_compile_warn_error(PartDesign)
-endif()
-
-if(FREECAD_USE_PCH)
-    target_precompile_headers(PartDesign PRIVATE
-            $<$<COMPILE_LANGUAGE:CXX>:"${CMAKE_CURRENT_LIST_DIR}/PreCompiled.h">
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(PartDesign PRIVATE
+        -Wno-unused-parameter -Wno-missing-field-initializers
+        -Wno-deprecated-declarations -Wno-sign-compare
     )
-endif(FREECAD_USE_PCH)
+endif()
 
-SET_BIN_DIR(PartDesign _PartDesign /Mod/PartDesign)
-SET_PYTHON_PREFIX_SUFFIX(PartDesign)
-
-INSTALL(TARGETS PartDesign DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(TARGETS PartDesign LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})

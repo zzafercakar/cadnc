@@ -2,25 +2,22 @@
  * @file main.cpp
  * @brief Application entry point for CADNC — a FreeCAD-backed CAD-CAM desktop application.
  *
- * Handles:
- *  - OpenGL surface format configuration (GLX backend, Core Profile)
- *  - Single-instance enforcement via QLockFile
- *  - Qt Linguist translation loading
- *  - QML engine startup
+ * Initializes the FreeCAD backend via CadEngine, then starts the Qt6 QML UI.
  */
 
 #include <QDir>
 #include <QGuiApplication>
 #include <QLockFile>
 #include <QQmlApplicationEngine>
-#include <QLocale>
-#include <QQuickWindow>
 #include <QQmlContext>
+#include <QQuickWindow>
 #include <QTranslator>
+#include <QLocale>
 
 #include "AppVersion.h"
+#include "CadEngine.h"
 
-// ── Crash-backtrace signal handler ───────────────────────────────────────────
+// ── Crash-backtrace signal handler ──────────────────────────────────
 #include <csignal>
 #include <cstring>
 #include <cstdlib>
@@ -91,21 +88,32 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    // ── Initialize FreeCAD backend ──────────────────────────────────
+    CADNC::CadEngine engine;
+    if (!engine.init(argc, argv)) {
+        qCritical("Failed to initialize FreeCAD backend");
+        return 1;
+    }
+
+    // Create default document
+    engine.newDocument("Untitled");
+
     // Load translations
     QTranslator translator;
     if (translator.load(QLocale(), "cadnc", "_", ":/translations")) {
         app.installTranslator(&translator);
     }
 
-    // Load the QML UI
-    QQmlApplicationEngine engine;
-    engine.rootContext()->setContextProperty("appVersion", app.applicationVersion());
+    // Load the QML UI with CadEngine exposed as context property
+    QQmlApplicationEngine qmlEngine;
+    qmlEngine.rootContext()->setContextProperty("appVersion", app.applicationVersion());
+    qmlEngine.rootContext()->setContextProperty("cadEngine", &engine);
 
-    QObject::connect(&engine, &QQmlEngine::quit, &app, &QGuiApplication::quit);
+    QObject::connect(&qmlEngine, &QQmlEngine::quit, &app, &QGuiApplication::quit);
 
-    engine.load(QUrl("qrc:/qml/Main.qml"));
+    qmlEngine.load(QUrl("qrc:/qml/Main.qml"));
 
-    if (engine.rootObjects().isEmpty())
+    if (qmlEngine.rootObjects().isEmpty())
         return -1;
 
     return app.exec();

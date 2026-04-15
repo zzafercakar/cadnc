@@ -666,6 +666,11 @@ void SketchObject::generateId(const Part::Geometry* geo)
 
 int SketchObject::setTextAndFont(int ConstrId, std::string& newText, std::string& newFont, bool isHeight, bool isConstruction)
 {
+#ifndef HAVE_FREETYPE
+    (void)ConstrId; (void)newText; (void)newFont; (void)isHeight; (void)isConstruction;
+    Base::Console().error("Text features require FreeType + harfbuzz (not available)\n");
+    return -1;
+#else
 ;    // no need to check input data validity as this is an sketchobject managed operation.
     Base::StateLocker lock(managedoperation, true);
 
@@ -774,6 +779,7 @@ int SketchObject::setTextAndFont(int ConstrId, std::string& newText, std::string
     }
 
     return err;
+#endif  // HAVE_FREETYPE
 }
 
 void SketchObject::acceptGeometry()

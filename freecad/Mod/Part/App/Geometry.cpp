@@ -121,13 +121,14 @@
 #include <memory>
 #include <vector>
 
-// FreeType Headers
+// FreeType Headers (CADNC: guarded — text features optional)
+#ifdef HAVE_FREETYPE
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include FT_GLYPH_H
 #include FT_OUTLINE_H
-
 #include <hb.h>
+#endif
 
 // headers to scale text correctly
 #include <BRepBndLib.hxx>
@@ -7339,6 +7340,7 @@ std::unique_ptr<GeomCurve> makeFromCurveAdaptor(const Adaptor3d_Curve& adapt, bo
 
 
 // ===== TEXT TO EDGES (adapted from FT2FC.cpp) =====
+#ifdef HAVE_FREETYPE
 namespace
 {
 // Context for FreeType decomposition callbacks
@@ -7456,6 +7458,7 @@ int cubic_cb(const FT_Vector* pt0, const FT_Vector* pt1, const FT_Vector* pt2, v
 
 
 }  // end anonymous namespace
+#endif  // HAVE_FREETYPE (FreeType callbacks)
 
 /**
  * @brief Takes a set of base shapes, transforms them to fit a two-point
@@ -7596,6 +7599,8 @@ void transformAndConvertToGeometry(
     }
 }
 
+// CADNC: text-to-wire requires FreeType + harfbuzz
+#ifdef HAVE_FREETYPE
 // The core logic, refactored from FT2FC to be Python-independent
 std::vector<TopoDS_Shape> makeTextWires(
     std::string& text,
@@ -7734,5 +7739,6 @@ std::vector<TopoDS_Shape> makeTextWires(
     FT_Done_FreeType(ftLib);
     return allWires;
 }
+#endif  // HAVE_FREETYPE
 
 }  // namespace Part

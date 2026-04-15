@@ -1,3 +1,5 @@
+// CADNC: entire file guarded — FreeType/harfbuzz optional
+#ifdef HAVE_FREETYPE
 // SPDX-License-Identifier: LGPL-2.1-or-later AND FTL
 
 /***************************************************************************
@@ -478,3 +480,4 @@ int calcClockDir(std::vector<Base::Vector3d> points)
 }
 
 #endif  // #ifdef FCUseFreeType
+#endif  // HAVE_FREETYPE

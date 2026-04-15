@@ -135,14 +135,14 @@ critical_rules:
   - "Python bagimliligi kabul edildi — cikarilmayacak"
 
 status:
-  current_phase: "Faz 0 TAMAMLANDI — Faz 1 baslayacak"
-  freecad_integration: "Moduller kopyalandi, build henuz wire edilmedi"
+  current_phase: "Faz 1 TAMAMLANDI — Faz 2 baslayacak"
+  freecad_integration: "6 kutuphane basariyla derleniyor (Base, App, Materials, Part, Sketcher, PartDesign)"
   adapter: "Skeleton — 4 facade header + 1 source (TODOs)"
   ui: "Minimal shell — Main.qml (model tree, viewport placeholder, properties)"
   cam: "MilCAD'den tasindi — adapter entegrasyonu bekliyor"
   nesting: "MilCAD'den tasindi — adapter entegrasyonu bekliyor"
   viewport: "Henuz olusturulmadi — Faz 5"
-  next_action: "Faz 1 — freecad/CMakeLists.txt yazarak FreeCAD modullerini derlemek"
+  next_action: "Faz 1.3 PoC — basit test programi yaz (document + sketch + constraint + solve)"
 
 reference_projects:
   freecad:

@@ -1,97 +1,28 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
+# FreeCADApp — document, property, expression, transaction system
 
 add_library(FreeCADApp SHARED)
 
-if(WIN32)
-    add_definitions(-DFCApp)
-    add_definitions(-DBOOST_DYN_LINK)
-endif(WIN32)
+# ---------------------------------------------------------------------------
+# Compile definitions
+# ---------------------------------------------------------------------------
+target_compile_definitions(FreeCADApp PRIVATE FreeCADApp_EXPORTS QT_NO_KEYWORDS)
 
-if(BUILD_TRACY_FRAME_PROFILER)
-    add_definitions(-DBUILD_TRACY_FRAME_PROFILER)
-endif()
-
-if(CMAKE_BUILD_TYPE)
-    add_definitions(-DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}")
-endif(CMAKE_BUILD_TYPE)
-
-if(FREECAD_RELEASE_SEH)
-    add_definitions(-DHAVE_SEH)
-endif(FREECAD_RELEASE_SEH)
-
-# This causes some problems with the resource files to be found, especially with the StartPage
-IF(RESOURCEDIR)
-    add_definitions(-DRESOURCEDIR="${RESOURCEDIR}")
-ENDIF(RESOURCEDIR)
-
-IF(LIBRARYDIR)
-    add_definitions(-DLIBRARYDIR="${LIBRARYDIR}")
-ENDIF(LIBRARYDIR)
-
-IF(DOCDIR)
-    add_definitions(-DDOCDIR="${DOCDIR}")
-ENDIF(DOCDIR)
-
-# -----------------------------------------------------------------------------
-
-#write relevant cmake variables to a file for later access with python. Exported are all variables
-#starting with BUILD. As the variable only exists if the user set it to ON a dict is useless, we
-#use a python list for export.
-set(_vars "const char CMakeVariables[] =\"cmake = [")
-set(_delim "")
-get_cmake_property(_variableNames VARIABLES)
-foreach (_variableName ${_variableNames})
-    if (${_variableName})
-        STRING(REGEX MATCH "^[_]?[^_]*" _prefix "${_variableName}_")
-        if(${_prefix} STREQUAL "BUILD")
-            STRING(REPLACE "\\" "\\\\" _name ${_variableName})
-            set(_vars "${_vars}${_delim}\\n\"\n\"\\\"${_name}\\\"")
-            set(_delim ",")
-        endif()
-    endif ()
-endforeach()
-set(_vars "${_vars}]\\n\" \n;")
-file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/CMakeScript.hh "${_vars}" )
-
-fc_copy_file_if_different(
-    "${CMAKE_CURRENT_BINARY_DIR}/CMakeScript.hh"
-    "${CMAKE_CURRENT_BINARY_DIR}/CMakeScript.h"
-)
-
-# -----------------------------------------------------------------------------
-
-target_include_directories(
-    FreeCADApp
-    PRIVATE
-    ${CMAKE_BINARY_DIR}
-    ${CMAKE_BINARY_DIR}/src
-    ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_BINARY_DIR}
-)
-
-target_include_directories(
-    FreeCADApp
-    SYSTEM
+# ---------------------------------------------------------------------------
+# Include directories
+# ---------------------------------------------------------------------------
+target_include_directories(FreeCADApp
     PUBLIC
-    ${QtCore_INCLUDE_DIRS}
-    ${QtXml_INCLUDE_DIRS}
+        "${FREECAD_SRC_DIR}"
+    PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+        "${CMAKE_CURRENT_BINARY_DIR}"
 )
 
-set(FreeCADApp_LIBS
-    FreeCADBase
-    ${Boost_LIBRARIES}
-    fmt::fmt
-)
-
-if(BUILD_TRACY_FRAME_PROFILER)
-    list(APPEND FreeCADApp_LIBS TracyClient)
-endif()
-
-list(APPEND FreeCADApp_LIBS
-        ${QtCore_LIBRARIES}
-        ${QtXml_LIBRARIES}
-)
-
+# ---------------------------------------------------------------------------
+# Pre-generated Python binding files (from .pyi via generate.py)
+# ---------------------------------------------------------------------------
+set(GENERATED_PY_SOURCES "")
 generate_from_py(ApplicationDirectories)
 generate_from_py(Document)
 generate_from_py(DocumentObject)
@@ -109,288 +40,149 @@ generate_from_py(OriginGroupExtension)
 generate_from_py(Part)
 generate_from_py(StringHasher)
 generate_from_py(StringID)
-
 generate_from_py(ComplexGeoData)
 generate_from_py(PropertyContainer)
 generate_from_py(Material)
 generate_from_py(MeasureManager)
 
-generate_embed_from_py(FreeCADInit InitScript.h)
-generate_embed_from_py(FreeCADTest TestScript.h)
-
-SET(FreeCADApp_Pyi_SRCS
-    ApplicationDirectories.pyi
-    Extension.pyi
-    ExtensionContainer.pyi
-    DocumentObjectExtension.pyi
-    GroupExtension.pyi
-    LinkBaseExtension.pyi
-    Metadata.pyi
-    DocumentObjectGroup.pyi
-    DocumentObject.pyi
-    GeoFeature.pyi
-    GeoFeatureGroupExtension.pyi
-    OriginGroupExtension.pyi
-    SuppressibleExtension.pyi
-    Part.pyi
-    Document.pyi
-    PropertyContainer.pyi
-    ComplexGeoData.pyi
-    Material.pyi
-    MeasureManager.pyi
-    StringHasher.pyi
-    StringID.pyi
-)
-SOURCE_GROUP("Pyi" FILES ${FreeCADApp_Pyi_SRCS})
-
-# The document stuff
-SET(Document_CPP_SRCS
+# ---------------------------------------------------------------------------
+# Source files — every .cpp except generated *Py.cpp (included via *PyImp.cpp)
+# ---------------------------------------------------------------------------
+set(FreeCADApp_SRCS
     Annotation.cpp
-    BackupPolicy.cpp
-    Document.cpp
-    DocumentObject.cpp
-    Extension.cpp
-    ExtensionPyImp.cpp
-    DocumentObjectExtension.cpp
-    DocumentObjectExtensionPyImp.cpp
-    ExtensionContainer.cpp
-    ExtensionContainerPyImp.cpp
-    Graphviz.cpp
-    GroupExtension.cpp
-    GroupExtensionPyImp.cpp
-    DocumentObjectFileIncluded.cpp
-    DocumentObjectGroup.cpp
-    DocumentObjectGroupPyImp.cpp
-    GeoFeaturePyImp.cpp
-    DocumentObjectPyImp.cpp
-    DocumentObserver.cpp
-    DocumentObserverPython.cpp
-    DocumentPyImp.cpp
-    Expression.cpp
-    ExpressionTokenizer.cpp
-    FeaturePython.cpp
-    FeatureTest.cpp
-    GeoFeature.cpp
-    GeoFeatureGroupExtensionPyImp.cpp
-    GeoFeatureGroupExtension.cpp
-    ImagePlane.cpp
-    OriginGroupExtensionPyImp.cpp
-    OriginGroupExtension.cpp
-    SuppressibleExtensionPyImp.cpp
-    SuppressibleExtension.cpp
-    PartPyImp.cpp
-    Part.cpp
-    Origin.cpp
-    Path.cpp
-    InventorObject.cpp
-    Placement.cpp
-    ProjectFile.cpp
-    Datums.cpp
-    Range.cpp
-    Transactions.cpp
-    TransactionalObject.cpp
-    VRMLObject.cpp
-    MaterialObject.cpp
-    MergeDocuments.cpp
-    TextDocument.cpp
-    Link.cpp
-    LinkBaseExtensionPyImp.cpp
-    VarSet.cpp
-    License.h
-)
-
-SET(Document_HPP_SRCS
-    Annotation.h
-    BackupPolicy.h
-    Document.h
-    DocumentObject.h
-    Extension.h
-    ExtensionContainer.h
-    GroupExtension.h
-    DocumentObjectExtension.h
-    DocumentObjectFileIncluded.h
-    DocumentObjectGroup.h
-    DocumentObserver.h
-    DocumentObserverPython.h
-    Expression.h
-    ExpressionParser.h
-    ExpressionTokenizer.h
-    ExpressionVisitors.h
-    FeatureCustom.h
-    FeaturePython.h
-    FeaturePythonPyImp.h
-    FeaturePythonPyImp.inl
-    FeatureTest.h
-    GeoFeature.h
-    GeoFeatureGroupExtension.h
-    ImagePlane.h
-    OriginGroupExtension.h
-    SuppressibleExtension.h
-    Part.h
-    Origin.h
-    Path.h
-    InventorObject.h
-    Placement.h
-    ProjectFile.h
-    Datums.h
-    Range.h
-    Transactions.h
-    TransactionalObject.h
-    VRMLObject.h
-    MaterialObject.h
-    MergeDocuments.h
-    TextDocument.h
-    VarSet.h
-    Link.h
-)
-SET(Document_SRCS
-    ${Document_CPP_SRCS}
-    ${Document_HPP_SRCS}
-)
-SOURCE_GROUP("Document" FILES ${Document_SRCS})
-
-# The property stuff
-SET(Properties_CPP_SRCS
-    DynamicProperty.cpp
-    ObjectIdentifier.cpp
-    Property.cpp
-    PropertyContainer.cpp
-    PropertyContainerPyImp.cpp
-    PropertyFile.cpp
-    PropertyGeo.cpp
-    PropertyLinks.cpp
-    PropertyPythonObject.cpp
-    PropertyStandard.cpp
-    PropertyUnits.cpp
-    PropertyExpressionEngine.cpp
-)
-SET(Properties_HPP_SRCS
-    DynamicProperty.h
-    ObjectIdentifier.h
-    Property.h
-    PropertyContainer.h
-    PropertyFile.h
-    PropertyGeo.h
-    PropertyLinks.h
-    PropertyPythonObject.h
-    PropertyStandard.h
-    PropertyUnits.h
-    PropertyExpressionEngine.h
-    PropertyOverrides.h
-)
-SET(Properties_SRCS
-    ${Properties_CPP_SRCS}
-    ${Properties_HPP_SRCS}
-)
-SOURCE_GROUP("Properties" FILES ${Properties_SRCS})
-
-SET(FreeCADApp_CPP_SRCS
-    ${Document_CPP_SRCS}
-    ${Properties_CPP_SRCS}
     Application.cpp
     ApplicationDirectories.cpp
     ApplicationDirectoriesPyImp.cpp
     ApplicationPy.cpp
     AutoTransaction.cpp
+    BackupPolicy.cpp
     Branding.cpp
     CleanupProcess.cpp
     ColorModel.cpp
     ComplexGeoData.cpp
     ComplexGeoDataPyImp.cpp
     ConsoleQtBridge.cpp
-    TranslationQtBridge.cpp
+    Datums.cpp
+    Document.cpp
+    DocumentObject.cpp
+    DocumentObjectExtension.cpp
+    DocumentObjectExtensionPyImp.cpp
+    DocumentObjectFileIncluded.cpp
+    DocumentObjectGroup.cpp
+    DocumentObjectGroupPyImp.cpp
+    DocumentObjectPyImp.cpp
+    DocumentObserver.cpp
+    DocumentObserverPython.cpp
+    DocumentPyImp.cpp
+    DynamicProperty.cpp
     ElementMap.cpp
+    ElementNamingUtils.cpp
     Enumeration.cpp
+    Expression.cpp
+    ExpressionTokenizer.cpp
+    ExtensionContainer.cpp
+    ExtensionContainerPyImp.cpp
+    Extension.cpp
+    ExtensionPyImp.cpp
+    FeaturePython.cpp
+    FeatureTest.cpp
+    GeoFeature.cpp
+    GeoFeatureGroupExtension.cpp
+    GeoFeatureGroupExtensionPyImp.cpp
+    GeoFeaturePyImp.cpp
+    Graphviz.cpp
+    GroupExtension.cpp
+    GroupExtensionPyImp.cpp
+    ImagePlane.cpp
     IndexedName.cpp
+    InventorObject.cpp
+    LinkBaseExtensionPyImp.cpp
+    Link.cpp
     MappedElement.cpp
     MappedName.cpp
     Material.cpp
+    MaterialObject.cpp
     MaterialPyImp.cpp
     MeasureManager.cpp
     MeasureManagerPyImp.cpp
+    MergeDocuments.cpp
     Metadata.cpp
     MetadataPyImp.cpp
-    ElementNamingUtils.cpp
+    ObjectIdentifier.cpp
+    Origin.cpp
+    OriginGroupExtension.cpp
+    OriginGroupExtensionPyImp.cpp
+    Part.cpp
+    PartPyImp.cpp
+    Path.cpp
+    Placement.cpp
     ProgramInformation.cpp
+    ProjectFile.cpp
+    PropertyContainer.cpp
+    PropertyContainerPyImp.cpp
+    Property.cpp
+    PropertyExpressionEngine.cpp
+    PropertyFile.cpp
+    PropertyGeo.cpp
+    PropertyLinks.cpp
+    PropertyPythonObject.cpp
+    PropertyStandard.cpp
+    PropertyUnits.cpp
+    Range.cpp
     SafeMode.cpp
     Services.cpp
     StringHasher.cpp
     StringHasherPyImp.cpp
     StringIDPyImp.cpp
+    SuppressibleExtension.cpp
+    SuppressibleExtensionPyImp.cpp
+    TextDocument.cpp
+    TransactionalObject.cpp
+    Transactions.cpp
+    TranslationQtBridge.cpp
+    VarSet.cpp
+    VRMLObject.cpp
 )
 
-SET(FreeCADApp_HPP_SRCS
-    ${Document_HPP_SRCS}
-    ${Properties_HPP_SRCS}
-    Application.h
-    ApplicationDirectories.h
-    AutoTransaction.h
-    Branding.h
-    CleanupProcess.h
-    ColorModel.h
-    ComplexGeoData.h
-    ElementMap.h
-    Enumeration.h
-    IndexedName.h
-    MappedName.h
-    MappedElement.h
-    Material.h
-    MeasureManager.h
-    Metadata.h
-    ElementNamingUtils.h
-    ProgramInformation.h
-    Services.h
-    StringHasher.h
+target_sources(FreeCADApp PRIVATE
+    ${FreeCADApp_SRCS}
+    ${GENERATED_PY_SOURCES}
 )
 
-# auto-generate resource file with all available translations
-set (FreeCADApp_TR_QRC ${CMAKE_CURRENT_BINARY_DIR}/Resources/App_translation.qrc)
-qt_find_and_add_translation(QM_SRCS "Resources/translations/*_*.ts"
-    ${CMAKE_CURRENT_BINARY_DIR}/Resources/translations)
-qt_find_and_add_translation(QM_SRCS "${CMAKE_SOURCE_DIR}/src/Base/Resources/translations/*_*.ts"
-    ${CMAKE_CURRENT_BINARY_DIR}/Resources/translations)
-qt_create_resource_file(${FreeCADApp_TR_QRC} ${QM_SRCS})
-qt_add_resources(FreeCADApp_QRC_SRCS ${FreeCADApp_TR_QRC})
-
-SET(FreeCADApp_SRCS
-    ${FreeCADApp_QRC_SRCS}
-    ${FreeCADApp_CPP_SRCS}
-    ${FreeCADApp_HPP_SRCS}
-    ${FreeCADApp_Pyi_SRCS}
-    FreeCADInit.py
-    FreeCADTest.py
-    PreCompiled.h
+# ---------------------------------------------------------------------------
+# Link libraries
+# ---------------------------------------------------------------------------
+target_link_libraries(FreeCADApp PUBLIC
+    FreeCADBase
+    Qt6::Core
+    Qt6::Xml
+    ${Boost_LIBRARIES}
+    fmt::fmt
 )
 
-if(FREECAD_USE_PCH)
-    target_precompile_headers(FreeCADApp PRIVATE
-        $<$<COMPILE_LANGUAGE:CXX>:"${CMAKE_CURRENT_LIST_DIR}/PreCompiled.h">
+# ---------------------------------------------------------------------------
+# Compiler settings
+# ---------------------------------------------------------------------------
+target_compile_features(FreeCADApp PUBLIC cxx_std_20)
+set_target_properties(FreeCADApp PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+)
+
+# Suppress warnings in FreeCAD upstream code
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(FreeCADApp PRIVATE
+        -Wno-unused-parameter
+        -Wno-missing-field-initializers
+        -Wno-deprecated-declarations
+        -Wno-sign-compare
+        -Wno-write-strings
     )
-endif(FREECAD_USE_PCH)
-
-target_sources(FreeCADApp PRIVATE ${FreeCADApp_SRCS})
-target_link_libraries(FreeCADApp ${FreeCADApp_LIBS})
-
-if (MSVC)
-    target_compile_definitions(FreeCADApp PRIVATE WIN32_LEAN_AND_MEAN)
-    target_compile_options(FreeCADApp PRIVATE /wd4251 /wd4273 /wd4275)
 endif()
 
-if (FREECAD_WARN_ERROR)
-    target_compile_warn_error(FreeCADApp)
-endif()
-
-add_dependencies(FreeCADApp fc_version)
-
-SET_BIN_DIR(FreeCADApp FreeCADApp)
-
-if(WIN32)
-    INSTALL(TARGETS FreeCADApp
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    )
-else(WIN32)
-    INSTALL(TARGETS FreeCADApp
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    )
-endif(WIN32)
+# ---------------------------------------------------------------------------
+# Install
+# ---------------------------------------------------------------------------
+install(TARGETS FreeCADApp
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
