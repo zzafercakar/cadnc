@@ -1,25 +1,64 @@
-# CADNC — Ilk Oturum Prompt'u
+# CADNC — Sonraki Session Prompt
 
-Asagidaki metni yeni workspace'te ilk mesaj olarak kullan:
-
----
-
-Bu proje CADNC — FreeCAD'in cekirdek modullerini (Sketcher, Part, PartDesign) CAD backend olarak kullanan, modern QML arayuzlu bir CAD-CAM uygulamasi.
-
-Oncelikle su dosyalari oku ve proje hakkinda tam bilgi edin:
-1. `.ai/START_HERE.md` — mimari ve kritik kurallar
-2. `.ai/context.yaml` — proje durumu, tech stack, modul yapisi
-3. `.ai/WORKPLAN.md` — detayli gelistirme plani ve fazlar
-4. `.ai/ENGINEERING_LOG.md` — kararlar ve MilCAD'den ogrenilen dersler
-5. `.ai/REFERENCE_SOURCES.md` — tum kaynak dosya yollari (FreeCAD, MilCAD, LibreCAD, SolveSpace)
-6. `CLAUDE.md` — Claude Code icin proje talimatlari
-
-Proje durumu:
-- Faz 0 TAMAMLANDI: Proje iskeleti kuruldu, FreeCAD modulleri kopyalandi (Base, App, Part/App, Sketcher/App, PartDesign/App), MilCAD'den CAM/nesting/ikonlar tasindi
-- Faz 1 SIRADAKI: FreeCAD modullerinin CMake build entegrasyonu
-
-Siradaki gorev: Faz 1'e basla — freecad/CMakeLists.txt dosyasini yazarak FreeCAD Base, App, Part, Sketcher ve PartDesign modullerini sirayla derleyebilecek CMake konfigurasyonunu olustur. Ilk hedef: FreeCADBase kutuphanesini basariyla derlemek.
-
-FreeCAD kaynaklari zaten freecad/ dizininde. Orijinal FreeCAD CMake dosyalari referans olarak /home/embed/Downloads/FreeCAD-main-1-1/src/ altinda mevcut.
+Aşağıdaki metni kopyala-yapıştır ile yeni session'a yapıştır:
 
 ---
+
+Bu proje CADNC — FreeCAD'in çekirdek modüllerini (Sketcher, Part, PartDesign) CAD backend olarak kullanan, modern QML arayüzlü bir CAD-CAM uygulaması.
+
+Öncelikle şu dosyaları oku ve proje hakkında tam bilgi edin:
+
+- `.ai/START_HERE.md` — mimari ve kritik kurallar
+- `.ai/context.yaml` — proje durumu, tech stack, modül yapısı
+- `.ai/WORKPLAN.md` — detaylı geliştirme planı ve fazlar
+- `.ai/ENGINEERING_LOG.md` — kararlar ve MilCAD'den öğrenilenler
+- `CLAUDE.md` — Claude Code için proje talimatları
+
+## Proje Durumu (2026-04-15)
+
+**Tamamlanan Fazlar:**
+- **Faz 0:** Proje iskeleti kuruldu
+- **Faz 1:** FreeCAD 6 modül derleniyor (Base, App, Materials, Part, Sketcher, PartDesign — toplam ~83MB)
+- **Faz 2:** Adapter katmanı çalışıyor (CadSession, CadDocument, SketchFacade, PartFacade, CadEngine QML bridge)
+- **Faz 3:** UI shell hazır (MilCAD-tarzı toolbar'lar, 4 workbench, ModelTree, ConstraintPanel, SketchCanvas, StatusBar)
+
+**Sıradaki Faz: Faz 4 — 3D Feature Zinciri**
+
+Hedefler:
+1. **Pad dialog** — sketch seçip pad length girişi, PartFacade.pad() çağrısı
+2. **Pocket dialog** — benzer şekilde pocket oluşturma
+3. **Revolution dialog** — açı girişiyle revolution
+4. **Feature tree senkronizasyonu** — recompute sonrası featureTree güncelleme
+5. **Undo/Redo** — UI'da tam çalışır undo/redo
+
+**Sonrasında Faz 5 — OCCT Viewport (EN KRİTİK):**
+- V3d_Viewer + QQuickFramebufferObject entegrasyonu
+- AIS_ViewCube (native NavCube — QML replica'yı değiştirecek)
+- AIS_Shape rendering (TopoDS_Shape görüntüleme)
+- Selection, grid, snap, view presets
+
+## Build & Run
+
+```bash
+cmake -B build -S . -DCADNC_ENABLE_FREECAD_BACKEND=ON
+cmake --build build -j$(nproc)
+# Run app
+cd build && DISPLAY=:0 QT_QPA_PLATFORM=xcb LD_LIBRARY_PATH=lib:$LD_LIBRARY_PATH ./cadnc
+# Run PoC test
+cd build && LD_LIBRARY_PATH=lib:$LD_LIBRARY_PATH ./bin/poc_freecad_test
+# Run adapter test
+cd build && LD_LIBRARY_PATH=lib:$LD_LIBRARY_PATH ./bin/test_adapter
+```
+
+## Referans Kaynaklar
+- MilCAD QML: `/home/embed/Dev/MilCAD/qml/` (özellikle Main.qml 3488 satır, tüm toolbar/panel dosyaları)
+- FreeCAD kaynak: `/home/embed/Downloads/FreeCAD-main-1-1/src/`
+- MilCAD viewport: `/home/embed/Dev/MilCAD/viewport/` (OCCT QQuickFramebufferObject entegrasyonu)
+
+## Önemli Notlar
+- UI kodu FreeCAD header'ı include etmemeli — sadece adapter/ üzerinden
+- AIS_InteractiveContext işlemleri SADECE render thread'de — UI thread'den asla
+- OCCT kütüphaneleri tek tek listelenmeli, ${OpenCASCADE_LIBRARIES} değil
+- NavCube şu an QML replica — Faz 5'te OCCT AIS_ViewCube ile değiştirilecek
+- Python bağımlılığı kabul edildi
+- C++20 gerekli (FreeCAD 1.2)
