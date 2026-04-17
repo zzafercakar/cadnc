@@ -63,8 +63,8 @@ Item {
     readonly property color colGridMajor:     "#A8AEBA"
     readonly property color colAxisX:         "#EF5350"  // red
     readonly property color colAxisY:         "#66BB6A"  // green
-    readonly property color colInference:     "rgba(0, 184, 108, 0.5)"
-    readonly property color colSnapInference: "rgba(0, 168, 220, 0.4)"
+    readonly property color colInference:     Qt.rgba(0/255, 184/255, 108/255, 0.5)
+    readonly property color colSnapInference: Qt.rgba(0/255, 168/255, 220/255, 0.4)
 
     // ── Snap engine ────────────────────────────────────────────────
     function snapToGrid(val) { return Math.round(val / gridSpacing) * gridSpacing }
