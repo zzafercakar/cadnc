@@ -115,8 +115,10 @@ public:
 
     // ── Sketch tools ────────────────────────────────────────────────
     int trim(int geoId, Point2D point);
-    int fillet(int geoId1, int geoId2, double radius);
-    int chamfer(int geoId1, int geoId2, double size);
+    /// Fillet at vertex: geoId identifies the geometry, posId the PointPos (1=start, 2=end)
+    int fillet(int geoId, int posId, double radius);
+    /// Chamfer at vertex (placeholder — uses fillet internally)
+    int chamfer(int geoId, int posId, double size);
 
     // ── Solver ──────────────────────────────────────────────────────
     SolveResult solve();

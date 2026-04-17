@@ -137,6 +137,7 @@ file(GLOB VIEWPORT_SOURCES CONFIGURE_DEPENDS viewport/src/*.cpp)
 file(GLOB UI_SOURCES CONFIGURE_DEPENDS ui/src/*.cpp ui/src/*.h)
 file(GLOB QML_FILES CONFIGURE_DEPENDS
     ui/qml/*.qml
+    ui/qml/qmldir
     ui/qml/components/*.qml
     ui/qml/panels/*.qml
     ui/qml/toolbars/*.qml
@@ -222,10 +223,16 @@ if(CADNC_ENABLE_FREECAD_BACKEND)
     message(STATUS "FreeCAD backend integration is enabled")
 
     # ── Adapter library — bridges UI ↔ FreeCAD ──────────────────────
-    add_library(cadnc_adapter STATIC ${ADAPTER_HEADERS} ${ADAPTER_SOURCES})
+    add_library(cadnc_adapter STATIC ${ADAPTER_HEADERS} ${ADAPTER_SOURCES}
+        ${CAM_HEADERS} ${CAM_SOURCES}
+        ${NESTING_HEADERS} ${NESTING_SOURCES}
+    )
     target_include_directories(cadnc_adapter PUBLIC adapter/inc)
     target_include_directories(cadnc_adapter PRIVATE
         "${CMAKE_SOURCE_DIR}/freecad"
+        "${CMAKE_SOURCE_DIR}/viewport/inc"
+        "${CMAKE_SOURCE_DIR}/cam/inc"
+        "${CMAKE_SOURCE_DIR}/nesting/inc"
     )
     target_include_directories(cadnc_adapter SYSTEM PRIVATE
         ${OpenCASCADE_INCLUDE_DIR}
@@ -233,6 +240,7 @@ if(CADNC_ENABLE_FREECAD_BACKEND)
     )
     target_link_libraries(cadnc_adapter PUBLIC
         PartDesign Sketcher Part Materials FreeCADApp FreeCADBase
+        Qt6::Core Qt6::Quick
     )
     target_compile_definitions(cadnc_adapter PRIVATE QT_NO_KEYWORDS)
     target_compile_features(cadnc_adapter PUBLIC cxx_std_20)
@@ -271,9 +279,24 @@ if(CADNC_ENABLE_FREECAD_BACKEND)
     )
 endif()
 
-if(CADNC_BUILD_TESTS)
+if(CADNC_BUILD_TESTS AND CADNC_ENABLE_FREECAD_BACKEND)
     enable_testing()
-    # add_subdirectory(tests)
+
+    # Adapter layer test: session → document → sketch → constraints → solve
+    add_test(NAME adapter_test
+        COMMAND $<TARGET_FILE:test_adapter>
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+    )
+
+    # PoC FreeCAD test: headless init → geometry → solver
+    add_test(NAME poc_freecad_test
+        COMMAND $<TARGET_FILE:poc_freecad_test>
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+    )
+
+    # Part flow test disabled — second App::Application instance causes
+    # PyException in destructor. Pad test merged into adapter_test instead.
+    # TODO: investigate test isolation for separate PartDesign test binary
 endif()
 
 install(TARGETS cadnc DESTINATION bin)

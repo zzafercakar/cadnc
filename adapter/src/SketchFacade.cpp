@@ -27,44 +27,63 @@ SketchFacade::~SketchFacade() = default;
 
 int SketchFacade::addLine(Point2D p1, Point2D p2, bool construction)
 {
-    auto geo = std::make_unique<Part::GeomLineSegment>();
-    geo->setPoints(Base::Vector3d(p1.x, p1.y, 0), Base::Vector3d(p2.x, p2.y, 0));
-    return impl_->sketch->addGeometry(geo.release(), construction);
+    try {
+        auto geo = std::make_unique<Part::GeomLineSegment>();
+        geo->setPoints(Base::Vector3d(p1.x, p1.y, 0), Base::Vector3d(p2.x, p2.y, 0));
+        return impl_->sketch->addGeometry(geo.release(), construction);
+    } catch (...) { return -1; }
 }
 
 int SketchFacade::addCircle(Point2D center, double radius, bool construction)
 {
-    auto geo = std::make_unique<Part::GeomCircle>();
-    geo->setCenter(Base::Vector3d(center.x, center.y, 0));
-    geo->setRadius(radius);
-    return impl_->sketch->addGeometry(geo.release(), construction);
+    if (radius < 1e-7) return -1;  // reject degenerate
+    try {
+        auto geo = std::make_unique<Part::GeomCircle>();
+        geo->setCenter(Base::Vector3d(center.x, center.y, 0));
+        geo->setRadius(radius);
+        return impl_->sketch->addGeometry(geo.release(), construction);
+    } catch (...) { return -1; }
 }
 
 int SketchFacade::addArc(Point2D center, double radius,
                          double startAngle, double endAngle, bool construction)
 {
-    auto geo = std::make_unique<Part::GeomArcOfCircle>();
-    geo->setCenter(Base::Vector3d(center.x, center.y, 0));
-    geo->setRadius(radius);
-    geo->setRange(startAngle, endAngle, true);
-    return impl_->sketch->addGeometry(geo.release(), construction);
+    if (radius < 1e-7) return -1;  // reject degenerate
+    try {
+        auto geo = std::make_unique<Part::GeomArcOfCircle>();
+        geo->setCenter(Base::Vector3d(center.x, center.y, 0));
+        geo->setRadius(radius);
+        geo->setRange(startAngle, endAngle, true);
+        return impl_->sketch->addGeometry(geo.release(), construction);
+    } catch (...) { return -1; }
 }
 
 int SketchFacade::addRectangle(Point2D p1, Point2D p2, bool construction)
 {
-    // Rectangle = 4 lines + 4 coincident constraints
-    int id0 = addLine(p1, {p2.x, p1.y}, construction);
-    int id1 = addLine({p2.x, p1.y}, p2, construction);
-    int id2 = addLine(p2, {p1.x, p2.y}, construction);
-    int id3 = addLine({p1.x, p2.y}, p1, construction);
+    // Reject degenerate rectangle (zero area causes solver issues)
+    if (std::abs(p1.x - p2.x) < 1e-7 || std::abs(p1.y - p2.y) < 1e-7)
+        return -1;
 
-    // Close corners with coincident constraints
-    addCoincident(id0, 2, id1, 1); // end of L0 = start of L1
-    addCoincident(id1, 2, id2, 1);
-    addCoincident(id2, 2, id3, 1);
-    addCoincident(id3, 2, id0, 1);
+    try {
+        // Rectangle = 4 lines + 4 coincident constraints
+        int id0 = addLine(p1, {p2.x, p1.y}, construction);
+        int id1 = addLine({p2.x, p1.y}, p2, construction);
+        int id2 = addLine(p2, {p1.x, p2.y}, construction);
+        int id3 = addLine({p1.x, p2.y}, p1, construction);
 
-    return id0; // return first line id
+        if (id0 < 0 || id1 < 0 || id2 < 0 || id3 < 0)
+            return id0;  // partial — skip constraints
+
+        // Close corners with coincident constraints
+        addCoincident(id0, 2, id1, 1); // end of L0 = start of L1
+        addCoincident(id1, 2, id2, 1);
+        addCoincident(id2, 2, id3, 1);
+        addCoincident(id3, 2, id0, 1);
+
+        return id0;
+    } catch (...) {
+        return -1;
+    }
 }
 
 int SketchFacade::addPoint(Point2D p, bool construction)
@@ -75,7 +94,7 @@ int SketchFacade::addPoint(Point2D p, bool construction)
 
 void SketchFacade::removeGeometry(int geoId)
 {
-    impl_->sketch->delGeometry(geoId);
+    try { impl_->sketch->delGeometry(geoId); } catch (...) {}
 }
 
 // ── Constraints ─────────────────────────────────────────────────────
@@ -105,23 +124,27 @@ static Sketcher::ConstraintType toSketcherType(ConstraintType t)
 
 int SketchFacade::addConstraint(ConstraintType type, int firstGeo, int secondGeo, double value)
 {
-    auto c = std::make_unique<Sketcher::Constraint>();
-    c->Type = toSketcherType(type);
-    c->setElement(0, Sketcher::GeoElementId(firstGeo, Sketcher::PointPos::none));
-    if (secondGeo >= 0) {
-        c->setElement(1, Sketcher::GeoElementId(secondGeo, Sketcher::PointPos::none));
-    }
-    if (value != 0.0) c->setValue(value);
-    return impl_->sketch->addConstraint(c.release());
+    try {
+        auto c = std::make_unique<Sketcher::Constraint>();
+        c->Type = toSketcherType(type);
+        c->setElement(0, Sketcher::GeoElementId(firstGeo, Sketcher::PointPos::none));
+        if (secondGeo >= 0) {
+            c->setElement(1, Sketcher::GeoElementId(secondGeo, Sketcher::PointPos::none));
+        }
+        if (value != 0.0) c->setValue(value);
+        return impl_->sketch->addConstraint(c.release());
+    } catch (...) { return -1; }
 }
 
 int SketchFacade::addCoincident(int geo1, int pos1, int geo2, int pos2)
 {
-    auto c = std::make_unique<Sketcher::Constraint>();
-    c->Type = Sketcher::Coincident;
-    c->setElement(0, Sketcher::GeoElementId(geo1, static_cast<Sketcher::PointPos>(pos1)));
-    c->setElement(1, Sketcher::GeoElementId(geo2, static_cast<Sketcher::PointPos>(pos2)));
-    return impl_->sketch->addConstraint(c.release());
+    try {
+        auto c = std::make_unique<Sketcher::Constraint>();
+        c->Type = Sketcher::Coincident;
+        c->setElement(0, Sketcher::GeoElementId(geo1, static_cast<Sketcher::PointPos>(pos1)));
+        c->setElement(1, Sketcher::GeoElementId(geo2, static_cast<Sketcher::PointPos>(pos2)));
+        return impl_->sketch->addConstraint(c.release());
+    } catch (...) { return -1; }
 }
 
 int SketchFacade::addDistance(int geoId, double distance)
@@ -179,51 +202,60 @@ int SketchFacade::addFixed(int geoId)
 
 void SketchFacade::removeConstraint(int constraintId)
 {
-    impl_->sketch->delConstraint(constraintId);
+    try { impl_->sketch->delConstraint(constraintId); } catch (...) {}
 }
 
 void SketchFacade::setDatum(int constraintId, double value)
 {
-    impl_->sketch->setDatum(constraintId, value);
+    try { impl_->sketch->setDatum(constraintId, value); } catch (...) {}
 }
 
 void SketchFacade::toggleDriving(int constraintId)
 {
-    impl_->sketch->toggleDriving(constraintId);
+    try { impl_->sketch->toggleDriving(constraintId); } catch (...) {}
 }
 
 // ── Sketch tools ────────────────────────────────────────────────────
 
 int SketchFacade::trim(int geoId, Point2D point)
 {
-    return impl_->sketch->trim(geoId, Base::Vector3d(point.x, point.y, 0));
+    try {
+        return impl_->sketch->trim(geoId, Base::Vector3d(point.x, point.y, 0));
+    } catch (...) { return -1; }
 }
 
-int SketchFacade::fillet(int geoId, int posId, double radius)
+int SketchFacade::fillet(int geoId1, int geoId2, double radius)
 {
     // FreeCAD fillet on a vertex identified by geoId + PointPos
-    return impl_->sketch->fillet(geoId, static_cast<Sketcher::PointPos>(posId), radius);
+    try {
+        return impl_->sketch->fillet(geoId1, static_cast<Sketcher::PointPos>(geoId2), radius);
+    } catch (...) { return -1; }
 }
 
-int SketchFacade::chamfer(int geoId, int posId, double size)
+int SketchFacade::chamfer(int geoId1, int geoId2, double size)
 {
     // SketchObject has no direct chamfer — use fillet as placeholder
-    // TODO: implement proper chamfer when available
-    return impl_->sketch->fillet(geoId, static_cast<Sketcher::PointPos>(posId), size);
+    try {
+        return impl_->sketch->fillet(geoId1, static_cast<Sketcher::PointPos>(geoId2), size);
+    } catch (...) { return -1; }
 }
 
 // ── Solver ──────────────────────────────────────────────────────────
 
 SolveResult SketchFacade::solve()
 {
-    int result = impl_->sketch->solve();
-    switch (result) {
-        case 0:  return SolveResult::Solved;
-        case -1: return SolveResult::SolverError;
-        case -2: return SolveResult::Redundant;
-        case -3: return SolveResult::Conflicting;
-        case -4: return SolveResult::OverConstrained;
-        default: return SolveResult::UnderConstrained;
+    try {
+        int result = impl_->sketch->solve();
+        switch (result) {
+            case 0:  return SolveResult::Solved;
+            case -1: return SolveResult::SolverError;
+            case -2: return SolveResult::Redundant;
+            case -3: return SolveResult::Conflicting;
+            case -4: return SolveResult::OverConstrained;
+            default: return SolveResult::UnderConstrained;
+        }
+    } catch (...) {
+        return SolveResult::SolverError;
     }
 }
 
@@ -319,7 +351,7 @@ int SketchFacade::constraintCount() const
 
 void SketchFacade::close()
 {
-    impl_->sketch->solve();
+    try { impl_->sketch->solve(); } catch (...) {}
 }
 
 } // namespace CADNC

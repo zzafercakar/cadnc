@@ -13,6 +13,7 @@ Popup {
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
     property int targetGeoId: -1
+    property string presetType: ""  // "distance", "radius", "angle" — set before open()
     signal valueAccepted(string constraintType, double value)
 
     background: Rectangle {
@@ -154,6 +155,12 @@ Popup {
     }
 
     onOpened: {
+        // Apply preset type if set by toolbar button
+        if (presetType === "radius") typeSelector.currentIndex = 1
+        else if (presetType === "angle") typeSelector.currentIndex = 2
+        else typeSelector.currentIndex = 0  // default: distance
+        presetType = ""
+
         valueField.forceActiveFocus()
         valueField.selectAll()
     }

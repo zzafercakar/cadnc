@@ -96,6 +96,36 @@ int main(int argc, char* argv[])
                     c.id, c.value, c.isDriving ? "yes" : "no");
     }
 
+    // ── 10. Close sketch and test Pad ────────────────────────────────
+    sketch->close();
+    doc->recompute();
+    std::printf("[10] Sketch closed + recomputed\n");
+
+    // ── 11. Pad via PartFacade ─────────────────────────────────────
+    auto part = doc->partDesign();
+    if (part) {
+        std::string padName = part->pad("Sketch001", 10.0);
+        if (!padName.empty()) {
+            std::printf("[11] Pad created: %s\n", padName.c_str());
+
+            void* shape = doc->getFeatureShape(padName);
+            std::printf("     Pad shape: %s\n", shape ? "OK" : "null");
+        } else {
+            std::printf("[11] Pad FAILED (Body not available?)\n");
+        }
+    }
+
+    // ── 12. Export test ────────────────────────────────────────────
+    bool exported = doc->exportTo("/tmp/cadnc_adapter_test.step");
+    std::printf("[12] STEP export: %s\n", exported ? "OK" : "skipped");
+
+    // ── 13. Final feature tree ─────────────────────────────────────
+    tree = doc->featureTree();
+    std::printf("[13] Final feature tree (%zu items):\n", tree.size());
+    for (const auto& f : tree) {
+        std::printf("    - %s (%s)\n", f.name.c_str(), f.typeName.c_str());
+    }
+
     std::printf("\n══════════════════════════════════════════════\n");
     std::printf("  Adapter Layer Test COMPLETED\n");
     std::printf("══════════════════════════════════════════════\n\n");

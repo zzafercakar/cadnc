@@ -66,51 +66,74 @@ CODESYS SoftMotion CNC kontrol cihazlari icin G-Code ureten, modern arayuzlu bir
 
 ---
 
-## Faz 4: 3D Feature Zinciri [SIRADAKI]
+## Faz 4: 3D Feature Zinciri [TAMAMLANDI - 2026-04-15]
 
-- [ ] Pad dialog (PartFacade.pad + UI popup)
-- [ ] Pocket dialog
-- [ ] Revolution dialog
-- [ ] 3D Fillet/Chamfer (edge selection gerekli)
-- [ ] Linear/Polar Pattern, Mirror
-- [ ] Feature tree senkronizasyonu — recompute sonrasi UI guncelleme
-- [ ] Undo/Redo UI entegrasyonu
-
----
-
-## Faz 5: Viewport ve Rendering [BEKLIYOR]
-
-**KRITIK: AIS_ViewCube + AIS_Triedron bu fazda native OCCT olarak gelecek**
-
-- [ ] OCCT V3d_Viewer + QQuickFramebufferObject entegrasyonu
-- [ ] TopoDS_Shape → AIS_Shape rendering
-- [ ] AIS_ViewCube (native NavCube — QML replica'yi degistirecek)
-- [ ] AIS_Triedron (native axis gizmo)
-- [ ] Selection highlighting (AIS_InteractiveContext)
-- [ ] Grid + snap (render thread'de)
-- [ ] View presets (top, front, right, isometric)
-- [ ] Zoom, pan, orbit
-- [ ] Sketch mode 2D overlay
+- [x] CadEngine QML'e bağlandı (main.cpp'de instance oluşturuldu, QML context'e expose edildi)
+- [x] Pad dialog (FeatureDialog.qml — sketch seçimi + length girişi + PartFacade.pad çağrısı)
+- [x] Pocket dialog (aynı FeatureDialog, featureType="pocket")
+- [x] Revolution dialog (aynı FeatureDialog, featureType="revolve")
+- [x] CadEngine'e pad/pocket/revolution Q_INVOKABLE metotları eklendi
+- [x] CadEngine'e canUndo/canRedo/sketchNames Q_PROPERTY eklendi
+- [x] Feature tree senkronizasyonu — featureTreeChanged sinyali ile otomatik güncelleme
+- [x] Undo/Redo UI entegrasyonu — opacity ile disabled durumu gösterimi
+- [x] PartToolbar aksiyonları dialog'lara bağlandı
+- [ ] 3D Fillet/Chamfer (edge selection gerekli — Faz 5 viewport sonrası)
+- [ ] Linear/Polar Pattern, Mirror (PartFacade'de TODO)
 
 ---
 
-## Faz 6: CAM/Nesting Entegrasyonu [BEKLIYOR]
+## Faz 5: Viewport ve Rendering [TAMAMLANDI - 2026-04-15]
 
-- [ ] CamGeometrySource adapter
-- [ ] Facing, Profile, Pocket, Drill operasyonlari
-- [ ] G-Code generation (CODESYS + Generic)
-- [ ] Nesting (BLF, BBox, NFP)
-- [ ] CamPanel — G-code preview, simulation controls, operation queue
+- [x] OCCT V3d_Viewer + QQuickFramebufferObject entegrasyonu (OccViewport + OccRenderer)
+- [x] TopoDS_Shape → AIS_Shape rendering (CadEngine → OccViewport → OccRenderer pipeline)
+- [x] AIS_ViewCube (native OCCT — upper-right, animated, clickable)
+- [x] AIS_Triedron (native ZBuffer triedron — lower-left)
+- [x] Selection highlighting (AIS_InteractiveContext, deferred to render thread)
+- [x] Rectangular grid (Aspect_GDM_Points, 10mm spacing)
+- [x] Zoom (wheel), pan (middle-drag), orbit (right-drag) via AIS_ViewController
+- [x] GlTools utility (Qt↔OCCT coordinate conversion, modifier/button mapping)
+- [x] QtFrameBuffer (sRGB-safe FBO wrapper)
+- [x] Thread-safe shape operations (mutex-protected queue, processed in render())
+- [x] CadEngine → OccViewport pipeline (pad/pocket/revolution → auto-display in 3D)
+- [x] Gradient background, 8x MSAA, high-quality tessellation
+- [ ] View presets (top, front, right, isometric — ViewCube handles this, dedicated buttons pending)
+- [ ] Sketch mode 2D overlay (future enhancement)
 
 ---
 
-## Faz 7: UI Modernizasyonu [BEKLIYOR]
+## Faz 6: CAM/Nesting Entegrasyonu [TAMAMLANDI - 2026-04-15]
 
-- [ ] Property panel — FreeCAD property QML gosterim
-- [ ] Dimension input on-canvas (MilCAD-style SmartDimension)
-- [ ] File dialogs (new doc, open, save, export STEP/IGES/DXF/STL)
-- [ ] Theme sistemi (dark/light toggle)
-- [ ] User preferences
+- [x] CamFacade adapter — CAM operations bridge (Profile, Pocket, Drill, Facing)
+- [x] NestFacade adapter — Nesting operations bridge (BLF, BBox algorithms)
+- [x] CadEngine CAM Q_INVOKABLE metotları (setStock, addTool, addController, addProfile, addPocket, addDrill, addFacing, generateGCode, exportGCode)
+- [x] CadEngine Nesting Q_INVOKABLE metotları (addPart, clearParts, setSheet, setPartGap, setEdgeGap, setRotation, run)
+- [x] G-Code generation — Fanuc + LinuxCNC/CODESYS post-processors
+- [x] G-Code export — file dialog integration (standard + CODESYS)
+- [x] CAM toolbar actions connected (export G-Code, CODESYS export)
+- [x] Nesting toolbar actions connected (run nesting, optimize with rotation)
+- [x] CAM/Nesting modules compiled into cadnc_adapter static library
+- [ ] CamPanel — G-code preview (gelecekte)
+- [ ] Nesting visualization — visual part placement on sheet (gelecekte)
+- [ ] Tool path visualization in viewport (gelecekte)
+
+---
+
+## Faz 7: UI Modernizasyonu [TAMAMLANDI - 2026-04-15]
+
+- [x] Theme.qml singleton — centralized dark/light tema sistemi (100+ semantic color token)
+- [x] PropertiesPanel — feature parametre görüntüleme (document info, sketch stats, display settings)
+- [x] ModelTreePanel — gelişmiş: context menu (Edit/Rename/Delete), selection highlight, document origin row, type badge, footer count
+- [x] ConstraintPanel — tema entegrasyonu, gelişmiş görünüm
+- [x] File dialogs — Open (FCStd/STEP/IGES), Save (FCStd), Export (STEP/IGES/STL/DXF)
+- [x] Viewport context menu — right-click: Fit All, view presets, Create Sketch
+- [x] Dark/Light mode toggle — header button + Ctrl+T shortcut + View menu
+- [x] Menu bar — gelişmiş: Export submenu, enabled/disabled undo/redo, theme toggle
+- [x] Quick Access Bar — tema uyumlu, dark mode destekli
+- [x] Status Bar — gelişmiş badges (solver, geo count), tema uyumlu
+- [x] About Dialog — gelişmiş: viewport bilgisi eklendi
+- [x] All panels — context-sensitive: sketch mode → Constraints + Properties, part mode → Properties only
+- [ ] Dimension input on-canvas (SmartDimension — gelecekte)
+- [ ] User preferences dialog (gelecekte)
 
 ---
 

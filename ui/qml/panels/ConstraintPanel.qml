@@ -1,16 +1,15 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import ".."
 
 /**
- * ConstraintPanel — Right sidebar showing active sketch constraints.
- * Purple-themed with Canvas-drawn constraint icons.
+ * ConstraintPanel — Constraint list for active sketch.
+ * Shows constraint type, value, driving/reference status.
  */
 Rectangle {
     id: panel
-    color: "#FFFFFF"
-    border.width: 1
-    border.color: "#C8CDD6"
+    color: Theme.panel
 
     ColumnLayout {
         anchors.fill: parent
@@ -19,50 +18,45 @@ Rectangle {
 
         // ── Header ──────────────────────────────────────────────────
         Rectangle {
-            Layout.fillWidth: true
-            height: 36
-            color: "#F5F3FF"
+            Layout.fillWidth: true; height: 36
+            color: Qt.rgba(Theme.cstrDriving.r, Theme.cstrDriving.g, Theme.cstrDriving.b, 0.06)
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 12
-                anchors.rightMargin: 8
+                anchors.leftMargin: 12; anchors.rightMargin: 8
                 spacing: 6
 
                 Rectangle {
                     width: 20; height: 20; radius: 4
-                    color: "#EDE9FE"
+                    color: Qt.rgba(Theme.cstrDriving.r, Theme.cstrDriving.g, Theme.cstrDriving.b, 0.15)
                     Text {
                         anchors.centerIn: parent
-                        text: "\u26D3"  // chain
+                        text: "\u26D3"
                         font.pixelSize: 11
                     }
                 }
 
                 Text {
                     text: "Constraints"
-                    font.pixelSize: 13
+                    font.pixelSize: Theme.fontMd
                     font.bold: true
-                    color: "#1F2937"
+                    color: Theme.text
                     Layout.fillWidth: true
                 }
 
                 Rectangle {
-                    visible: cadEngine.sketchConstraints.length > 0
-                    width: cntLabel.implicitWidth + 10
-                    height: 18
-                    radius: 9
-                    color: "#EDE9FE"
+                    visible: cadEngine.sketchActive
+                    width: cCountLabel.implicitWidth + 10
+                    height: 18; radius: 9
+                    color: Qt.rgba(Theme.cstrDriving.r, Theme.cstrDriving.g, Theme.cstrDriving.b, 0.12)
                     border.width: 1
-                    border.color: "#C4B5FD"
+                    border.color: Qt.rgba(Theme.cstrDriving.r, Theme.cstrDriving.g, Theme.cstrDriving.b, 0.3)
 
                     Text {
-                        id: cntLabel
-                        anchors.centerIn: parent
+                        id: cCountLabel; anchors.centerIn: parent
                         text: cadEngine.sketchConstraints.length
-                        font.pixelSize: 10
-                        font.bold: true
-                        color: "#7C3AED"
+                        font.pixelSize: Theme.fontSm; font.bold: true
+                        color: Theme.cstrDriving
                     }
                 }
             }
@@ -70,134 +64,168 @@ Rectangle {
             Rectangle {
                 anchors.bottom: parent.bottom
                 width: parent.width; height: 1
-                color: "#C8CDD6"
+                color: Theme.border
             }
         }
 
         // ── Constraint list ─────────────────────────────────────────
         ListView {
-            id: listView
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+            id: constraintList
+            Layout.fillWidth: true; Layout.fillHeight: true
             clip: true
             model: cadEngine.sketchConstraints
 
             delegate: Rectangle {
-                width: listView.width
-                height: 34
-                color: delMouse.containsMouse ? "#F5F3FF" : "transparent"
+                id: cDelegate
+                width: constraintList.width; height: editMode ? 52 : 34
+                color: cMouseArea.containsMouse ? Theme.hover : "transparent"
+
+                property bool isDriving: modelData.isDriving !== false
+                property color cColor: isDriving ? Theme.cstrDriving : Theme.cstrRef
+                property bool hasDatum: modelData.value !== undefined && modelData.value !== 0
+                property bool editMode: false
 
                 RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 12
-                    anchors.rightMargin: 8
-                    spacing: 6
+                    anchors.left: parent.left; anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.leftMargin: 12; anchors.rightMargin: 8
+                    height: 34; spacing: 6
 
-                    // Constraint type color dot
+                    // Driving toggle dot — click to toggle driving/reference
                     Rectangle {
                         width: 8; height: 8; radius: 4
-                        color: modelData.isDriving ? "#7C3AED" : "#D4D4D8"
+                        color: cColor
+                        MouseArea {
+                            anchors.fill: parent; anchors.margins: -4
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: cadEngine.toggleDriving(modelData.id)
+                            ToolTip.text: isDriving ? "Make reference" : "Make driving"
+                            ToolTip.visible: containsMouse; ToolTip.delay: 300
+                            hoverEnabled: true
+                        }
                     }
 
-                    // Type name
                     Text {
-                        text: modelData.typeName
-                        font.pixelSize: 11
-                        font.bold: true
-                        color: "#374151"
-                        Layout.preferredWidth: 80
+                        text: modelData.typeName || "Constraint"
+                        font.pixelSize: Theme.fontBase
+                        font.bold: isDriving
+                        color: Theme.text
+                        Layout.fillWidth: true
                     }
 
-                    // Value (if dimensional)
-                    Text {
-                        visible: modelData.value !== 0
-                        text: modelData.value.toFixed(2)
-                        font.pixelSize: 11
-                        font.family: "monospace"
-                        color: modelData.isDriving ? "#059669" : "#D97706"
-                    }
-
-                    // Driving indicator
-                    Text {
-                        visible: !modelData.isDriving
-                        text: "(ref)"
-                        font.pixelSize: 9
-                        color: "#9CA3AF"
-                    }
-
-                    Item { Layout.fillWidth: true }
-
-                    // Geo reference
-                    Text {
-                        text: "G" + modelData.firstGeoId
-                        font.pixelSize: 9
-                        font.family: "monospace"
-                        color: "#9CA3AF"
-                    }
-
-                    // Delete button (hover reveal)
+                    // Clickable datum value — click to enter edit mode
                     Rectangle {
-                        visible: delMouse.containsMouse
-                        width: 20; height: 20; radius: 4
-                        color: delBtnMouse.containsMouse ? "#FEE2E2" : "transparent"
+                        visible: hasDatum
+                        width: datumLabel.implicitWidth + 8; height: 18; radius: 3
+                        color: datumArea.containsMouse ? Qt.rgba(cColor.r, cColor.g, cColor.b, 0.15) : "transparent"
+
+                        Text {
+                            id: datumLabel; anchors.centerIn: parent
+                            text: modelData.value !== undefined ? modelData.value.toFixed(2) : ""
+                            font.pixelSize: Theme.fontSm; font.family: Theme.fontMono
+                            color: isDriving ? Theme.success : Theme.warning
+                        }
+                        MouseArea {
+                            id: datumArea; anchors.fill: parent
+                            hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                            onClicked: { cDelegate.editMode = true; datumField.text = modelData.value.toFixed(4); datumField.forceActiveFocus(); datumField.selectAll() }
+                        }
+                    }
+
+                    Text {
+                        visible: !isDriving
+                        text: "(ref)"
+                        font.pixelSize: Theme.fontXs; font.italic: true
+                        color: Theme.textTer
+                    }
+
+                    Text {
+                        text: "G" + (modelData.firstGeoId !== undefined ? modelData.firstGeoId : "?")
+                        font.pixelSize: Theme.fontXs; font.family: Theme.fontMono
+                        color: Theme.textTer
+                    }
+
+                    Rectangle {
+                        width: 18; height: 18; radius: 3
+                        visible: cMouseArea.containsMouse
+                        color: delArea.containsMouse ? Theme.dangerBg : "transparent"
 
                         Text {
                             anchors.centerIn: parent
-                            text: "\u00D7"
-                            font.pixelSize: 14
-                            color: "#DC2626"
+                            text: "\u2715"; font.pixelSize: 10
+                            color: delArea.containsMouse ? Theme.danger : Theme.textTer
                         }
-
                         MouseArea {
-                            id: delBtnMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
+                            id: delArea; anchors.fill: parent
+                            hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                             onClicked: cadEngine.removeConstraint(modelData.id)
                         }
                     }
                 }
 
+                // Inline datum editor — appears below constraint row when editMode=true
+                Row {
+                    anchors.left: parent.left; anchors.right: parent.right
+                    anchors.top: parent.top; anchors.topMargin: 34
+                    anchors.leftMargin: 20; anchors.rightMargin: 8
+                    visible: editMode; spacing: 4; height: 18
+
+                    TextField {
+                        id: datumField; width: 80; height: 18
+                        font.pixelSize: 11; font.family: Theme.fontMono
+                        horizontalAlignment: Text.AlignRight
+                        validator: DoubleValidator { bottom: 0.001; decimals: 4 }
+                        background: Rectangle { radius: 3; color: "#F5F3FF"; border.width: 1; border.color: Theme.cstrDriving }
+                        onAccepted: { cadEngine.setDatum(modelData.id, parseFloat(text)); cDelegate.editMode = false }
+                        onActiveFocusChanged: if (!activeFocus) cDelegate.editMode = false
+                        Keys.onEscapePressed: cDelegate.editMode = false
+                    }
+
+                    Text { text: "mm"; font.pixelSize: 10; color: Theme.textTer; anchors.verticalCenter: parent.verticalCenter }
+                }
+
                 MouseArea {
-                    id: delMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    propagateComposedEvents: true
-                    onClicked: function(mouse) { mouse.accepted = false }
-                    onPressed: function(mouse) { mouse.accepted = false }
+                    id: cMouseArea; anchors.fill: parent
+                    hoverEnabled: true; z: -1
                 }
 
                 Rectangle {
                     anchors.bottom: parent.bottom
                     anchors.left: parent.left; anchors.right: parent.right
-                    anchors.leftMargin: 12
-                    height: 1; color: "#F3F4F6"
+                    anchors.leftMargin: 12; height: 1; color: Theme.divider
                 }
             }
 
-            // Empty state
-            Label {
+            Column {
                 anchors.centerIn: parent
-                visible: listView.count === 0
-                text: cadEngine.sketchActive ? "No constraints\nAdd H, V, or Dim" : "No active sketch"
-                color: "#9CA3AF"
-                font.pixelSize: 12
-                horizontalAlignment: Text.AlignHCenter
+                visible: constraintList.count === 0
+                spacing: 4
+
+                Text {
+                    text: cadEngine.sketchActive ? "No constraints" : "No active sketch"
+                    font.pixelSize: Theme.fontBase; font.italic: true
+                    color: Theme.textTer
+                    anchors.horizontalCenter: parent.horizontalCenter
+                }
+                Text {
+                    visible: cadEngine.sketchActive
+                    text: "Press H, V, or D to add"
+                    font.pixelSize: Theme.fontSm; color: Theme.textTer
+                    anchors.horizontalCenter: parent.horizontalCenter
+                }
             }
         }
 
-        // ── Footer ──────────────────────────────────────────────────
         Rectangle {
-            Layout.fillWidth: true
-            height: 24
-            color: "#F9FAFB"
+            Layout.fillWidth: true; height: 24
+            color: Theme.panelAlt; visible: cadEngine.sketchActive
 
-            Rectangle { width: parent.width; height: 1; color: "#E5E7EB" }
+            Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: Theme.borderLight }
 
             Text {
                 anchors.centerIn: parent
-                text: cadEngine.sketchConstraints.length + " constraint(s)"
-                font.pixelSize: 10
-                color: "#6B7280"
+                text: cadEngine.sketchConstraints.length + " constraint" + (cadEngine.sketchConstraints.length !== 1 ? "s" : "")
+                font.pixelSize: Theme.fontSm; color: Theme.textTer
             }
         }
     }

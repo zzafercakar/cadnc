@@ -2,14 +2,23 @@
 #include "CadSession.h"
 #include "CadDocument.h"
 #include "SketchFacade.h"
+#include "PartFacade.h"
+#include "CamFacade.h"
+#include "NestFacade.h"
+#include "OccViewport.h"
 
 #include <cmath>
+#include <TopoDS_Shape.hxx>
+#include <Quantity_Color.hxx>
+#include <Mod/Part/App/PartFeature.h>
 
 namespace CADNC {
 
 CadEngine::CadEngine(QObject* parent)
     : QObject(parent)
     , session_(std::make_unique<CadSession>())
+    , cam_(std::make_unique<CamFacade>())
+    , nest_(std::make_unique<NestFacade>())
 {
 }
 
@@ -23,17 +32,101 @@ bool CadEngine::init(int argc, char** argv)
     return ok;
 }
 
+void CadEngine::setViewport(OccViewport* viewport)
+{
+    viewport_ = viewport;
+}
+
 // ── Document ────────────────────────────────────────────────────────
 
 bool CadEngine::newDocument(const QString& name)
 {
-    document_ = session_->newDocument(name.toStdString());
+    // Close existing document if any
     if (document_) {
-        setStatus("Document created: " + name);
+        activeSketch_.reset();
+        document_.reset();
+    }
+
+    document_ = session_->newDocument(name.toStdString());
+    documentPath_.clear();
+    if (document_) {
+        setStatus("New document: " + name);
         Q_EMIT featureTreeChanged();
+        Q_EMIT sketchChanged();
         return true;
     }
     return false;
+}
+
+bool CadEngine::openDocument(const QString& filePath)
+{
+    if (filePath.isEmpty()) return false;
+
+    // Close existing
+    if (document_) {
+        activeSketch_.reset();
+        document_.reset();
+    }
+
+    auto doc = std::make_shared<CadDocument>("Loading");
+    if (doc->load(filePath.toStdString())) {
+        document_ = doc;
+        documentPath_ = filePath;
+        setStatus("Opened: " + filePath);
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+        return true;
+    }
+    setStatus("Failed to open: " + filePath);
+    return false;
+}
+
+bool CadEngine::saveDocument()
+{
+    if (!document_) return false;
+
+    if (documentPath_.isEmpty()) {
+        setStatus("No file path — use Save As");
+        return false;
+    }
+    return saveDocumentAs(documentPath_);
+}
+
+bool CadEngine::saveDocumentAs(const QString& filePath)
+{
+    if (!document_ || filePath.isEmpty()) return false;
+
+    bool ok = document_->save(filePath.toStdString());
+    if (ok) {
+        documentPath_ = filePath;
+        setStatus("Saved: " + filePath);
+        Q_EMIT featureTreeChanged();
+    } else {
+        setStatus("Save failed: " + filePath);
+    }
+    return ok;
+}
+
+bool CadEngine::exportDocument(const QString& filePath)
+{
+    if (!document_ || filePath.isEmpty()) return false;
+
+    bool ok = document_->exportTo(filePath.toStdString());
+    if (ok)
+        setStatus("Exported: " + filePath);
+    else
+        setStatus("Export failed: " + filePath);
+    return ok;
+}
+
+void CadEngine::closeDocument()
+{
+    if (activeSketch_) closeSketch();
+    document_.reset();
+    documentPath_.clear();
+    setStatus("Document closed");
+    Q_EMIT featureTreeChanged();
+    Q_EMIT sketchChanged();
 }
 
 void CadEngine::undo()
@@ -54,14 +147,66 @@ void CadEngine::redo()
     }
 }
 
-// ── Sketch lifecycle ────────────────────────────────────────────────
-
-bool CadEngine::createSketch(const QString& name)
+bool CadEngine::deleteFeature(const QString& name)
 {
     if (!document_) return false;
-    activeSketch_ = document_->addSketch(name.toStdString());
+
+    // Don't allow deleting the active sketch
+    if (activeSketch_ && name.toStdString() == activeSketchName_) {
+        setStatus("Cannot delete active sketch — close it first");
+        return false;
+    }
+
+    bool ok = document_->deleteFeature(name.toStdString());
+    if (ok) {
+        setStatus("Deleted: " + name);
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    } else {
+        setStatus("Delete failed: " + name);
+    }
+    return ok;
+}
+
+bool CadEngine::renameFeature(const QString& name, const QString& newLabel)
+{
+    if (!document_) return false;
+
+    bool ok = document_->renameFeature(name.toStdString(), newLabel.toStdString());
+    if (ok) {
+        setStatus("Renamed: " + newLabel);
+        Q_EMIT featureTreeChanged();
+    }
+    return ok;
+}
+
+// ── Sketch lifecycle ────────────────────────────────────────────────
+
+bool CadEngine::createSketch(const QString& name, int planeType)
+{
+    // Auto-create document if none exists
+    if (!document_) {
+        if (!newDocument("Untitled")) return false;
+    }
+    activeSketch_ = document_->addSketch(name.toStdString(), planeType);
     if (activeSketch_) {
-        setStatus("Sketch created: " + name);
+        static const char* planeNames[] = {"XY", "XZ", "YZ"};
+        const char* pn = (planeType >= 0 && planeType <= 2) ? planeNames[planeType] : "XY";
+        activeSketchName_ = name.toStdString();
+        setStatus(QString("Sketch created: %1 (%2 plane)").arg(name, pn));
+
+        // Keep sketch wireframe visible in OCCT viewport during editing
+        // (QML Canvas overlay only renders snap markers, not geometry)
+
+        // Orient viewport camera to face the sketch plane
+        if (viewport_) {
+            switch (planeType) {
+                case 0: viewport_->viewTop(); break;     // XY → top view
+                case 1: viewport_->viewFront(); break;   // XZ → front view
+                case 2: viewport_->viewRight(); break;   // YZ → right view
+            }
+        }
+
         Q_EMIT featureTreeChanged();
         Q_EMIT sketchChanged();
         return true;
@@ -74,7 +219,12 @@ bool CadEngine::openSketch(const QString& name)
     if (!document_) return false;
     activeSketch_ = document_->getSketch(name.toStdString());
     if (activeSketch_) {
+        activeSketchName_ = name.toStdString();
         setStatus("Editing sketch: " + name);
+
+        // Refresh viewport to show latest sketch wireframe
+        updateViewportShapes();
+
         Q_EMIT sketchChanged();
         return true;
     }
@@ -86,8 +236,16 @@ void CadEngine::closeSketch()
     if (activeSketch_) {
         activeSketch_->close();
         activeSketch_.reset();
+
+        // Recompute so FreeCAD builds the InternalShape (required for Pad/Pocket)
+        if (document_) document_->recompute();
+
         setStatus("Sketch closed");
         Q_EMIT sketchChanged();
+        Q_EMIT featureTreeChanged();
+
+        // Show sketch wireframe + any 3D features in the viewport
+        updateViewportShapes();
     }
 }
 
@@ -125,6 +283,14 @@ int CadEngine::addRectangle(double x1, double y1, double x2, double y2)
 {
     if (!activeSketch_) return -1;
     int id = activeSketch_->addRectangle({x1, y1}, {x2, y2});
+    refreshSketch();
+    return id;
+}
+
+int CadEngine::addPoint(double x, double y)
+{
+    if (!activeSketch_) return -1;
+    int id = activeSketch_->addPoint({x, y});
     refreshSketch();
     return id;
 }
@@ -195,6 +361,40 @@ int CadEngine::addFixedConstraint(int geoId)
     return id;
 }
 
+int CadEngine::addConstraintTwoGeo(const QString& type, int geoId)
+{
+    if (!activeSketch_) return -1;
+
+    // Two-click workflow: first call stores geo, second call applies constraint
+    if (pendingConstraintType_ == type && pendingFirstGeo_ >= 0 && pendingFirstGeo_ != geoId) {
+        int id = -1;
+        int g1 = pendingFirstGeo_, g2 = geoId;
+
+        if (type == "parallel")
+            id = activeSketch_->addConstraint(ConstraintType::Parallel, g1, g2);
+        else if (type == "perpendicular")
+            id = activeSketch_->addConstraint(ConstraintType::Perpendicular, g1, g2);
+        else if (type == "tangent")
+            id = activeSketch_->addConstraint(ConstraintType::Tangent, g1, g2);
+        else if (type == "equal")
+            id = activeSketch_->addConstraint(ConstraintType::Equal, g1, g2);
+        else if (type == "coincident")
+            id = activeSketch_->addCoincident(g1, 1, g2, 1);  // start-to-start
+
+        pendingConstraintType_.clear();
+        pendingFirstGeo_ = -1;
+        setStatus(QString("%1 constraint applied (G%2, G%3)").arg(type).arg(g1).arg(g2));
+        refreshSketch();
+        return id;
+    }
+
+    // First click — store and wait for second selection
+    pendingConstraintType_ = type;
+    pendingFirstGeo_ = geoId;
+    setStatus(QString("Select second geometry for %1 constraint").arg(type));
+    return -1;
+}
+
 void CadEngine::removeConstraint(int constraintId)
 {
     if (!activeSketch_) return;
@@ -232,6 +432,180 @@ int CadEngine::filletVertex(int geoId, int posId, double radius)
     int id = activeSketch_->fillet(geoId, posId, radius);
     refreshSketch();
     return id;
+}
+
+// ── Part features (3D operations) ───────────────────────────────
+
+QString CadEngine::pad(const QString& sketchName, double length)
+{
+    if (!document_) return {};
+
+    // Close active sketch before creating pad
+    if (activeSketch_) closeSketch();
+
+    auto part = document_->partDesign();
+    if (!part) return {};
+
+    std::string result = part->pad(sketchName.toStdString(), length);
+    if (!result.empty()) {
+        setStatus("Pad created: " + QString::fromStdString(result));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return QString::fromStdString(result);
+}
+
+QString CadEngine::pocket(const QString& sketchName, double depth)
+{
+    if (!document_) return {};
+
+    if (activeSketch_) closeSketch();
+
+    auto part = document_->partDesign();
+    if (!part) return {};
+
+    std::string result = part->pocket(sketchName.toStdString(), depth);
+    if (!result.empty()) {
+        setStatus("Pocket created: " + QString::fromStdString(result));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return QString::fromStdString(result);
+}
+
+QString CadEngine::revolution(const QString& sketchName, double angleDeg)
+{
+    if (!document_) return {};
+
+    if (activeSketch_) closeSketch();
+
+    auto part = document_->partDesign();
+    if (!part) return {};
+
+    std::string result = part->revolution(sketchName.toStdString(), angleDeg);
+    if (!result.empty()) {
+        setStatus("Revolution created: " + QString::fromStdString(result));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return QString::fromStdString(result);
+}
+
+// ── CAM ────────────────────────────────────────────────────────────
+
+void CadEngine::camSetStock(double length, double width, double height)
+{
+    cam_->setStock(length, width, height);
+    setStatus(QString("Stock set: %1 x %2 x %3 mm").arg(length).arg(width).arg(height));
+}
+
+int CadEngine::camAddTool(const QString& name, double diameter, double fluteLength)
+{
+    int id = cam_->addEndMill(name.toStdString(), diameter, fluteLength);
+    setStatus(QString("Tool added: %1 (D%2)").arg(name).arg(diameter));
+    return id;
+}
+
+int CadEngine::camAddController(int toolId, double rpm, double feedXY, double feedZ)
+{
+    return cam_->addToolController(toolId, rpm, feedXY, feedZ);
+}
+
+int CadEngine::camAddProfile(int controllerId, double depth, double stepDown,
+                             double x1, double y1, double x2, double y2)
+{
+    int id = cam_->addProfileOp(controllerId, depth, stepDown, x1, y1, x2, y2);
+    setStatus(QString("Profile operation added (depth: %1mm)").arg(depth));
+    return id;
+}
+
+int CadEngine::camAddPocket(int controllerId, double depth, double stepDown, double stepOver,
+                            double x1, double y1, double x2, double y2)
+{
+    int id = cam_->addPocketOp(controllerId, depth, stepDown, stepOver, x1, y1, x2, y2);
+    setStatus(QString("Pocket operation added (depth: %1mm)").arg(depth));
+    return id;
+}
+
+int CadEngine::camAddDrill(int controllerId, double depth, const QVariantList& points)
+{
+    std::vector<std::pair<double,double>> pts;
+    for (const auto& pt : points) {
+        auto map = pt.toMap();
+        pts.emplace_back(map["x"].toDouble(), map["y"].toDouble());
+    }
+    int id = cam_->addDrillOp(controllerId, depth, pts);
+    setStatus(QString("Drill operation added (%1 holes)").arg(pts.size()));
+    return id;
+}
+
+int CadEngine::camAddFacing(int controllerId, double depth, double stepOver)
+{
+    int id = cam_->addFacingOp(controllerId, depth, stepOver);
+    setStatus(QString("Facing operation added (depth: %1mm)").arg(depth));
+    return id;
+}
+
+int CadEngine::camOpCount() const { return cam_->operationCount(); }
+
+QString CadEngine::camGenerateGCode() const
+{
+    return QString::fromStdString(cam_->generateGCode());
+}
+
+bool CadEngine::camExportGCode(const QString& filePath, bool codesys) const
+{
+    return cam_->exportToFile(filePath.toStdString(), codesys);
+}
+
+// ── Nesting ────────────────────────────────────────────────────────
+
+bool CadEngine::nestAddPart(const QString& id, double width, double height,
+                            int quantity, bool allowRotation)
+{
+    bool ok = nest_->addPart(id.toStdString(), width, height, quantity, allowRotation);
+    if (ok) setStatus(QString("Nest part added: %1 (%2x%3, qty:%4)").arg(id).arg(width).arg(height).arg(quantity));
+    return ok;
+}
+
+void CadEngine::nestClearParts() { nest_->clearParts(); setStatus("Nest parts cleared"); }
+
+void CadEngine::nestSetSheet(const QString& id, double width, double height)
+{
+    nest_->setSheet(id.toStdString(), width, height);
+    setStatus(QString("Nest sheet: %1 (%2 x %3 mm)").arg(id).arg(width).arg(height));
+}
+
+void CadEngine::nestSetPartGap(double gap)  { nest_->setPartGap(gap); }
+void CadEngine::nestSetEdgeGap(double gap)  { nest_->setEdgeGap(gap); }
+void CadEngine::nestSetRotation(int mode)   { nest_->setRotationMode(mode); }
+
+QVariantMap CadEngine::nestRun(int algorithm)
+{
+    auto result = nest_->run(algorithm);
+
+    QVariantMap map;
+    map["totalPlaced"] = result.totalPlaced;
+    map["totalUnplaced"] = result.totalUnplaced;
+    map["utilization"] = result.utilization;
+    map["sheetsUsed"] = result.sheetsUsed;
+
+    QVariantList placements;
+    for (const auto& p : result.placements) {
+        QVariantMap pm;
+        pm["partId"] = QString::fromStdString(p.partId);
+        pm["x"] = p.x; pm["y"] = p.y;
+        pm["rotation"] = p.rotation;
+        pm["sheetIndex"] = p.sheetIndex;
+        placements.append(pm);
+    }
+    map["placements"] = placements;
+
+    setStatus(QString("Nesting: %1 placed, %2 unplaced, %3% util")
+        .arg(result.totalPlaced).arg(result.totalUnplaced)
+        .arg(static_cast<int>(result.utilization * 100)));
+
+    return map;
 }
 
 // ── Solver ──────────────────────────────────────────────────────────
@@ -330,12 +704,43 @@ QString CadEngine::solverStatus() const { return solverStatus_; }
 QString CadEngine::statusMessage() const { return statusMessage_; }
 bool CadEngine::sketchActive() const { return activeSketch_ != nullptr; }
 
+bool CadEngine::canUndo() const
+{
+    return document_ && document_->canUndo();
+}
+
+bool CadEngine::canRedo() const
+{
+    return document_ && document_->canRedo();
+}
+
+bool CadEngine::hasDocument() const { return document_ != nullptr; }
+QString CadEngine::documentPath() const { return documentPath_; }
+QString CadEngine::documentName() const { return document_ ? QString::fromStdString(document_->name()) : ""; }
+
+QStringList CadEngine::sketchNames() const
+{
+    QStringList names;
+    if (!document_) return names;
+
+    for (const auto& f : document_->featureTree()) {
+        // Sketcher::SketchObject type name
+        if (f.typeName.find("Sketcher::SketchObject") != std::string::npos) {
+            names.append(QString::fromStdString(f.name));
+        }
+    }
+    return names;
+}
+
 // ── Internal ────────────────────────────────────────────────────────
 
 void CadEngine::refreshSketch()
 {
     if (activeSketch_) {
         solve(); // auto-solve after every change
+        // Note: recompute + viewport update deferred to closeSketch().
+        // During sketch editing, only the solver runs — the QML SketchCanvas
+        // reads sketchGeometry directly from the SketchFacade, not from OCCT shapes.
     }
     Q_EMIT sketchChanged();
 }
@@ -344,6 +749,68 @@ void CadEngine::setStatus(const QString& msg)
 {
     statusMessage_ = msg;
     Q_EMIT statusMessageChanged();
+}
+
+void CadEngine::updateViewportShapes()
+{
+    if (!viewport_ || !document_) return;
+
+    // Clear existing shapes and re-display all features
+    viewport_->clearShapes();
+
+    auto features = document_->featureTree();
+
+    // Find the last solid feature (Body Tip) — show only its result shape
+    // plus any sketches as wireframe. PartDesign Body chain means the Tip
+    // already contains the cumulative solid from all features.
+    std::string tipName;
+    for (auto it = features.rbegin(); it != features.rend(); ++it) {
+        bool isSolid = it->typeName.find("Pad") != std::string::npos
+                    || it->typeName.find("Pocket") != std::string::npos
+                    || it->typeName.find("Revolution") != std::string::npos
+                    || it->typeName.find("Body") != std::string::npos;
+        if (isSolid) { tipName = it->name; break; }
+    }
+
+    for (const auto& f : features) {
+        bool isSketch = f.typeName.find("Sketcher::SketchObject") != std::string::npos;
+        bool isBody   = f.typeName.find("Body") != std::string::npos;
+
+        // Skip body object itself (its shape = Tip shape, we show Tip directly)
+        if (isBody) continue;
+
+        // For solid features, only show the Tip (last in chain) to avoid
+        // overlapping semi-transparent shapes
+        bool isSolid = f.typeName.find("Pad") != std::string::npos
+                    || f.typeName.find("Pocket") != std::string::npos
+                    || f.typeName.find("Revolution") != std::string::npos;
+        if (isSolid && f.name != tipName) continue;
+
+        void* featurePtr = document_->getFeatureShape(f.name);
+        if (!featurePtr) continue;
+
+        // getFeatureShape returns Part::Feature* — extract a COPY of the shape
+        // so the pointer stays valid after we leave this scope
+        auto* partFeature = static_cast<Part::Feature*>(featurePtr);
+        TopoDS_Shape shape = partFeature->Shape.getShape().getShape(); // copy
+        if (shape.IsNull()) continue;
+
+        // Color based on feature type
+        Quantity_Color color(0.5, 0.7, 0.9, Quantity_TOC_sRGB);  // default blue
+        if (isSketch)
+            color = Quantity_Color(0.02, 0.6, 0.4, Quantity_TOC_sRGB);    // teal wireframe
+        else if (f.typeName.find("Pad") != std::string::npos)
+            color = Quantity_Color(0.4, 0.75, 0.45, Quantity_TOC_sRGB);   // green
+        else if (f.typeName.find("Pocket") != std::string::npos)
+            color = Quantity_Color(0.85, 0.4, 0.35, Quantity_TOC_sRGB);   // red
+        else if (f.typeName.find("Revolution") != std::string::npos)
+            color = Quantity_Color(0.35, 0.55, 0.9, Quantity_TOC_sRGB);   // blue
+
+        // Sketches shown as wireframe, solids as shaded
+        viewport_->displayShape(f.name, shape, color, isSketch);
+    }
+
+    viewport_->fitAll();
 }
 
 } // namespace CADNC

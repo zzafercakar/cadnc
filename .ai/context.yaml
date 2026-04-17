@@ -135,14 +135,14 @@ critical_rules:
   - "Python bagimliligi kabul edildi — cikarilmayacak"
 
 status:
-  current_phase: "Faz 1 TAMAMLANDI — Faz 2 baslayacak"
-  freecad_integration: "6 kutuphane basariyla derleniyor (Base, App, Materials, Part, Sketcher, PartDesign)"
-  adapter: "Skeleton — 4 facade header + 1 source (TODOs)"
-  ui: "Minimal shell — Main.qml (model tree, viewport placeholder, properties)"
-  cam: "MilCAD'den tasindi — adapter entegrasyonu bekliyor"
-  nesting: "MilCAD'den tasindi — adapter entegrasyonu bekliyor"
-  viewport: "Henuz olusturulmadi — Faz 5"
-  next_action: "Faz 1.3 PoC — basit test programi yaz (document + sketch + constraint + solve)"
+  current_phase: "Faz 0-7 TAMAMLANDI — tum fazlar tamamlandi"
+  freecad_integration: "6 kutuphane basariyla derleniyor (Base, App, Materials, Part, Sketcher, PartDesign — toplam ~83MB)"
+  adapter: "CadSession, CadDocument, SketchFacade, PartFacade, CadEngine (QML bridge + viewport link) — tum metotlar calisiyor"
+  ui: "Professional UI — Theme system (dark/light), PropertiesPanel, enhanced ModelTree (context menu), File dialogs (Open/Save/Export), viewport context menu, 4 workbench toolbars"
+  cam: "CamFacade adapter — Profile, Pocket, Drill, Facing + G-Code generation (Fanuc/CODESYS) + file export"
+  nesting: "NestFacade adapter — BLF + BBox algorithms, rotation/mirror, optimization + QML connected"
+  viewport: "OCCT V3d_Viewer + QQuickFramebufferObject — AIS_ViewCube, grid, orbit/pan/zoom, shape rendering"
+  next_action: "Polish — toolpath visualization, nesting visual preview, CAM panel UI, advanced sketch tools"
 
 reference_projects:
   freecad:

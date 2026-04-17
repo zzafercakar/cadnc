@@ -31,6 +31,11 @@ bool CadSession::initialize(int argc, char** argv)
         // Full FreeCAD application init (Python, types, config, scripts)
         App::Application::init(argc, argv);
 
+        // Note: PartDesign types (Body, Pad, etc.) may not be registered in
+        // FreeCAD's type system yet because that requires Python module import.
+        // CadDocument::ensureBody() and PartFacade use direct C++ instantiation
+        // as a fallback when type-registry addObject fails.
+
         Base::Console().log("CADNC: FreeCAD backend initialized\n");
         initialized_ = true;
         return true;
@@ -67,13 +72,11 @@ std::shared_ptr<CadDocument> CadSession::newDocument(const std::string& name)
 
 void CadSession::closeDocument(const std::string& name)
 {
-    // Remove from our list
     documents_.erase(
         std::remove_if(documents_.begin(), documents_.end(),
             [&](const auto& d) { return d->name() == name; }),
         documents_.end());
 
-    // Close in FreeCAD
     try {
         App::GetApplication().closeDocument(name.c_str());
     } catch (...) {}
