@@ -43,6 +43,12 @@ ApplicationWindow {
     Shortcut { sequence: "C"; onActivated: if (cadEngine.sketchActive) activeDrawTool = "circle" }
     Shortcut { sequence: "R"; onActivated: if (cadEngine.sketchActive) activeDrawTool = "rectangle" }
     Shortcut { sequence: "A"; onActivated: if (cadEngine.sketchActive) activeDrawTool = "arc" }
+    Shortcut { sequence: "P"; onActivated: if (cadEngine.sketchActive) activeDrawTool = "polyline" }
+    Shortcut { sequence: "E"; onActivated: if (cadEngine.sketchActive) activeDrawTool = "ellipse" }
+    Shortcut { sequence: "S"; onActivated: if (cadEngine.sketchActive) activeDrawTool = "bspline" }
+    Shortcut { sequence: "X"; onActivated: if (cadEngine.sketchActive) activeDrawTool = "extend" }
+    Shortcut { sequence: "W"; onActivated: if (cadEngine.sketchActive) activeDrawTool = "split" }
+    Shortcut { sequence: "G"; onActivated: if (cadEngine.sketchActive && sketchCanvas.selectedGeo >= 0) cadEngine.toggleConstruction(sketchCanvas.selectedGeo) }
     Shortcut { sequence: "H"; onActivated: if (cadEngine.sketchActive && sketchCanvas.selectedGeo >= 0) cadEngine.addHorizontalConstraint(sketchCanvas.selectedGeo) }
     Shortcut { sequence: "D"; onActivated: if (cadEngine.sketchActive && sketchCanvas.selectedGeo >= 0) { dimInput.targetGeoId = sketchCanvas.selectedGeo; dimInput.open() } }
 
@@ -299,6 +305,22 @@ ApplicationWindow {
                     dimInput.x = (mainWindow.width - dimInput.width) / 2
                     dimInput.y = (mainWindow.height - dimInput.height) / 2
                     dimInput.open()
+                }
+                else if (type === "distanceX" || type === "distanceY" || type === "diameter") {
+                    dimInput.targetGeoId = geo
+                    dimInput.presetType = type
+                    dimInput.x = (mainWindow.width - dimInput.width) / 2
+                    dimInput.y = (mainWindow.height - dimInput.height) / 2
+                    dimInput.open()
+                }
+                else if (type === "symmetric") {
+                    cadEngine.addConstraintTwoGeo("symmetric", geo)
+                }
+                else if (type === "pointOnObject") {
+                    cadEngine.addConstraintTwoGeo("pointOnObject", geo)
+                }
+                else if (type === "toggleConstruction") {
+                    cadEngine.toggleConstruction(geo)
                 }
             }
             onDimensionRequested: {
@@ -562,6 +584,9 @@ ApplicationWindow {
             if (constraintType === "distance") cadEngine.addDistanceConstraint(targetGeoId, value)
             else if (constraintType === "radius") cadEngine.addRadiusConstraint(targetGeoId, value)
             else if (constraintType === "angle") cadEngine.addAngleConstraint(targetGeoId, -1, value)
+            else if (constraintType === "distanceX") cadEngine.addDistanceXConstraint(targetGeoId, value)
+            else if (constraintType === "distanceY") cadEngine.addDistanceYConstraint(targetGeoId, value)
+            else if (constraintType === "diameter") cadEngine.addDiameterConstraint(targetGeoId, value)
         }
     }
 

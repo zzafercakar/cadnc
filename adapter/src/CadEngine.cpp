@@ -302,6 +302,49 @@ void CadEngine::removeGeometry(int geoId)
     refreshSketch();
 }
 
+int CadEngine::addEllipse(double cx, double cy, double majorR, double minorR, double angleDeg)
+{
+    if (!activeSketch_) return -1;
+    double angleRad = angleDeg * M_PI / 180.0;
+    int id = activeSketch_->addEllipse({cx, cy}, majorR, minorR, angleRad);
+    refreshSketch();
+    return id;
+}
+
+int CadEngine::addBSpline(const QVariantList& points, int degree)
+{
+    if (!activeSketch_) return -1;
+    std::vector<CADNC::Point2D> poles;
+    for (const auto& pt : points) {
+        auto map = pt.toMap();
+        poles.push_back({map["x"].toDouble(), map["y"].toDouble()});
+    }
+    int id = activeSketch_->addBSpline(poles, degree);
+    refreshSketch();
+    return id;
+}
+
+int CadEngine::addPolyline(const QVariantList& points)
+{
+    if (!activeSketch_) return -1;
+    std::vector<CADNC::Point2D> pts;
+    for (const auto& pt : points) {
+        auto map = pt.toMap();
+        pts.push_back({map["x"].toDouble(), map["y"].toDouble()});
+    }
+    int id = activeSketch_->addPolyline(pts);
+    refreshSketch();
+    return id;
+}
+
+int CadEngine::toggleConstruction(int geoId)
+{
+    if (!activeSketch_) return -1;
+    int result = activeSketch_->toggleConstruction(geoId);
+    refreshSketch();
+    return result;
+}
+
 // ── Sketch constraints ──────────────────────────────────────────────
 
 int CadEngine::addDistanceConstraint(int geoId, double value)
@@ -361,6 +404,46 @@ int CadEngine::addFixedConstraint(int geoId)
     return id;
 }
 
+int CadEngine::addDistanceXConstraint(int geoId, double value)
+{
+    if (!activeSketch_) return -1;
+    int id = activeSketch_->addConstraint(ConstraintType::DistanceX, geoId, -1, value);
+    refreshSketch();
+    return id;
+}
+
+int CadEngine::addDistanceYConstraint(int geoId, double value)
+{
+    if (!activeSketch_) return -1;
+    int id = activeSketch_->addConstraint(ConstraintType::DistanceY, geoId, -1, value);
+    refreshSketch();
+    return id;
+}
+
+int CadEngine::addDiameterConstraint(int geoId, double value)
+{
+    if (!activeSketch_) return -1;
+    int id = activeSketch_->addConstraint(ConstraintType::Diameter, geoId, -1, value);
+    refreshSketch();
+    return id;
+}
+
+int CadEngine::addSymmetricConstraint(int geo1, int pos1, int geo2, int pos2, int symGeo, int symPos)
+{
+    if (!activeSketch_) return -1;
+    int id = activeSketch_->addConstraint(ConstraintType::Symmetric, geo1, geo2);
+    refreshSketch();
+    return id;
+}
+
+int CadEngine::addPointOnObjectConstraint(int pointGeo, int pointPos, int objectGeo)
+{
+    if (!activeSketch_) return -1;
+    int id = activeSketch_->addConstraint(ConstraintType::PointOnObject, pointGeo, objectGeo);
+    refreshSketch();
+    return id;
+}
+
 int CadEngine::addConstraintTwoGeo(const QString& type, int geoId)
 {
     if (!activeSketch_) return -1;
@@ -380,6 +463,10 @@ int CadEngine::addConstraintTwoGeo(const QString& type, int geoId)
             id = activeSketch_->addConstraint(ConstraintType::Equal, g1, g2);
         else if (type == "coincident")
             id = activeSketch_->addCoincident(g1, 1, g2, 1);  // start-to-start
+        else if (type == "symmetric")
+            id = activeSketch_->addConstraint(ConstraintType::Symmetric, g1, g2);
+        else if (type == "pointOnObject")
+            id = activeSketch_->addConstraint(ConstraintType::PointOnObject, g1, g2);
 
         pendingConstraintType_.clear();
         pendingFirstGeo_ = -1;
@@ -430,6 +517,30 @@ int CadEngine::filletVertex(int geoId, int posId, double radius)
 {
     if (!activeSketch_) return -1;
     int id = activeSketch_->fillet(geoId, posId, radius);
+    refreshSketch();
+    return id;
+}
+
+int CadEngine::chamferVertex(int geoId, int posId, double size)
+{
+    if (!activeSketch_) return -1;
+    int id = activeSketch_->chamfer(geoId, posId, size);
+    refreshSketch();
+    return id;
+}
+
+int CadEngine::extendGeo(int geoId, double increment, int endPointPos)
+{
+    if (!activeSketch_) return -1;
+    int id = activeSketch_->extend(geoId, increment, endPointPos);
+    refreshSketch();
+    return id;
+}
+
+int CadEngine::splitAtPoint(int geoId, double px, double py)
+{
+    if (!activeSketch_) return -1;
+    int id = activeSketch_->split(geoId, {px, py});
     refreshSketch();
     return id;
 }
@@ -662,6 +773,22 @@ QVariantList CadEngine::sketchGeometry() const
         item["radius"] = g.radius;
         item["startAngle"] = g.startAngle;
         item["endAngle"] = g.endAngle;
+        item["construction"] = g.construction;
+        item["majorRadius"] = g.majorRadius;
+        item["minorRadius"] = g.minorRadius;
+        item["angle"] = g.angle;
+        item["degree"] = g.degree;
+
+        if (!g.poles.empty()) {
+            QVariantList polesList;
+            for (const auto& p : g.poles) {
+                QVariantMap pm;
+                pm["x"] = p.x;
+                pm["y"] = p.y;
+                polesList.append(pm);
+            }
+            item["poles"] = polesList;
+        }
         list.append(item);
     }
     return list;
@@ -693,6 +820,11 @@ QVariantList CadEngine::sketchConstraints() const
             case ConstraintType::Tangent:       item["typeName"] = "Tangent"; break;
             case ConstraintType::Equal:         item["typeName"] = "Equal"; break;
             case ConstraintType::Fixed:         item["typeName"] = "Fixed"; break;
+            case ConstraintType::DistanceX:     item["typeName"] = "DistanceX"; break;
+            case ConstraintType::DistanceY:     item["typeName"] = "DistanceY"; break;
+            case ConstraintType::Diameter:      item["typeName"] = "Diameter"; break;
+            case ConstraintType::Symmetric:     item["typeName"] = "Symmetric"; break;
+            case ConstraintType::PointOnObject: item["typeName"] = "PointOnObject"; break;
             default:                            item["typeName"] = "Other"; break;
         }
         list.append(item);

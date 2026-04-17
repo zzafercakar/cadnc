@@ -149,6 +149,12 @@ Popup {
     function applyValue() {
         var val = parseFloat(valueField.text)
         if (isNaN(val) || val <= 0) return
+        // If a special preset type is active, use it directly instead of the selector
+        if (presetType === "distanceX" || presetType === "distanceY" || presetType === "diameter") {
+            valueAccepted(presetType, val)
+            popup.close()
+            return
+        }
         var type = typeSelector.types[typeSelector.currentIndex]
         valueAccepted(type, val)
         popup.close()
@@ -159,7 +165,7 @@ Popup {
         if (presetType === "radius") typeSelector.currentIndex = 1
         else if (presetType === "angle") typeSelector.currentIndex = 2
         else typeSelector.currentIndex = 0  // default: distance
-        presetType = ""
+        // Note: don't clear presetType here — applyValue() needs it for distanceX/distanceY/diameter
 
         valueField.forceActiveFocus()
         valueField.selectAll()

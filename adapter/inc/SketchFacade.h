@@ -44,19 +44,28 @@ enum class ConstraintType {
 /// Geometry info returned from the sketch (no OCCT types leak out)
 struct GeoInfo {
     int id = -1;
-    std::string type;       // "Line", "Circle", "Arc", "Point"
+    std::string type;       // "Line", "Circle", "Arc", "Point", "Ellipse", "BSpline"
     bool construction = false;
 
     // Line endpoints
     Point2D start, end;
 
-    // Circle/Arc center + radius
+    // Circle/Arc/Ellipse center + radius
     Point2D center;
     double radius = 0.0;
 
     // Arc angles (radians)
     double startAngle = 0.0;
     double endAngle = 0.0;
+
+    // Ellipse-specific
+    double majorRadius = 0.0;
+    double minorRadius = 0.0;
+    double angle = 0.0;         // major axis rotation
+
+    // BSpline-specific
+    std::vector<Point2D> poles;
+    int degree = 0;
 };
 
 /// Constraint info returned from the sketch
@@ -95,6 +104,11 @@ public:
                double startAngle, double endAngle, bool construction = false);
     int addRectangle(Point2D p1, Point2D p2, bool construction = false);
     int addPoint(Point2D p, bool construction = false);
+    int addEllipse(Point2D center, double majorRadius, double minorRadius,
+                   double angle = 0.0, bool construction = false);
+    int addBSpline(const std::vector<Point2D>& poles, int degree = 3,
+                   bool periodic = false, bool construction = false);
+    int addPolyline(const std::vector<Point2D>& points, bool construction = false);
 
     void removeGeometry(int geoId);
 
@@ -119,6 +133,9 @@ public:
     int fillet(int geoId, int posId, double radius);
     /// Chamfer at vertex (placeholder — uses fillet internally)
     int chamfer(int geoId, int posId, double size);
+    int extend(int geoId, double increment, int endPointPos);
+    int split(int geoId, Point2D point);
+    int toggleConstruction(int geoId);
 
     // ── Solver ──────────────────────────────────────────────────────
     SolveResult solve();

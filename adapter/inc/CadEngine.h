@@ -100,6 +100,10 @@ public:
                            double startAngle, double endAngle);
     Q_INVOKABLE int addRectangle(double x1, double y1, double x2, double y2);
     Q_INVOKABLE int addPoint(double x, double y);
+    Q_INVOKABLE int addEllipse(double cx, double cy, double majorR, double minorR, double angleDeg = 0);
+    Q_INVOKABLE int addBSpline(const QVariantList& points, int degree = 3);
+    Q_INVOKABLE int addPolyline(const QVariantList& points);
+    Q_INVOKABLE int toggleConstruction(int geoId);
     Q_INVOKABLE void removeGeometry(int geoId);
 
     // ── Sketch constraints ──────────────────────────────────────────
@@ -110,6 +114,11 @@ public:
     Q_INVOKABLE int addCoincidentConstraint(int geo1, int pos1, int geo2, int pos2);
     Q_INVOKABLE int addAngleConstraint(int geo1, int geo2, double angleDeg);
     Q_INVOKABLE int addFixedConstraint(int geoId);
+    Q_INVOKABLE int addDistanceXConstraint(int geoId, double value);
+    Q_INVOKABLE int addDistanceYConstraint(int geoId, double value);
+    Q_INVOKABLE int addDiameterConstraint(int geoId, double value);
+    Q_INVOKABLE int addSymmetricConstraint(int geo1, int pos1, int geo2, int pos2, int symGeo, int symPos);
+    Q_INVOKABLE int addPointOnObjectConstraint(int pointGeo, int pointPos, int objectGeo);
     /// Generic two-geometry constraint (parallel, perpendicular, tangent, equal, coincident).
     /// If secondGeoId is -1, the first geoId is stored and constraint is deferred
     /// until the method is called again with the same type and a different geoId.
@@ -121,6 +130,9 @@ public:
     // ── Sketch tools ────────────────────────────────────────────────
     Q_INVOKABLE int trimAtPoint(int geoId, double px, double py);
     Q_INVOKABLE int filletVertex(int geoId, int posId, double radius);
+    Q_INVOKABLE int chamferVertex(int geoId, int posId, double size);
+    Q_INVOKABLE int extendGeo(int geoId, double increment, int endPointPos);
+    Q_INVOKABLE int splitAtPoint(int geoId, double px, double py);
 
     // ── Part features (3D operations) ─────────────────────────────
     Q_INVOKABLE QString pad(const QString& sketchName, double length);

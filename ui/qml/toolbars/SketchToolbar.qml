@@ -35,20 +35,20 @@ Rectangle {
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/circle.svg"; tipText: "Circle (C)"; isActive: activeTool === "circle"; activeColor: "#34D399"; onClicked: toolSelected("circle") }
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/arc.svg"; tipText: "Arc (A)"; isActive: activeTool === "arc"; activeColor: "#34D399"; onClicked: toolSelected("arc") }
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/rect.svg"; tipText: "Rectangle (R)"; isActive: activeTool === "rectangle"; activeColor: "#34D399"; onClicked: toolSelected("rectangle") }
-        CadToolButton { iconPath: "qrc:/resources/icons/sketch/polyline.svg"; tipText: "Polyline (not implemented)"; isDisabled: true; activeColor: "#34D399" }
-        CadToolButton { iconPath: "qrc:/resources/icons/sketch/ellipse.svg"; tipText: "Ellipse (not implemented)"; isDisabled: true; activeColor: "#34D399" }
-        CadToolButton { iconPath: "qrc:/resources/icons/sketch/spline.svg"; tipText: "Spline (not implemented)"; isDisabled: true; activeColor: "#34D399" }
+        CadToolButton { iconPath: "qrc:/resources/icons/sketch/polyline.svg"; tipText: "Polyline (P)"; isActive: activeTool === "polyline"; activeColor: "#34D399"; onClicked: toolSelected("polyline") }
+        CadToolButton { iconPath: "qrc:/resources/icons/sketch/ellipse.svg"; tipText: "Ellipse (E)"; isActive: activeTool === "ellipse"; activeColor: "#34D399"; onClicked: toolSelected("ellipse") }
+        CadToolButton { iconPath: "qrc:/resources/icons/sketch/spline.svg"; tipText: "B-Spline (S)"; isActive: activeTool === "bspline"; activeColor: "#34D399"; onClicked: toolSelected("bspline") }
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/point.svg"; tipText: "Point"; isActive: activeTool === "point"; activeColor: "#34D399"; onClicked: toolSelected("point") }
 
         Rectangle { width: 1; height: 32; color: "#CBD5E1" }
 
         // Modify
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/trim.svg"; tipText: "Trim (T)"; isActive: activeTool === "trim"; accentColor: "#D97706"; activeColor: "#FBBF24"; onClicked: toolSelected("trim") }
-        CadToolButton { iconPath: "qrc:/resources/icons/sketch/offset.svg"; tipText: "Offset (not implemented)"; isDisabled: true; accentColor: "#D97706" }
-        CadToolButton { iconPath: "qrc:/resources/icons/sketch/mirror.svg"; tipText: "Mirror (not implemented)"; isDisabled: true; accentColor: "#D97706" }
+        CadToolButton { iconPath: "qrc:/resources/icons/sketch/offset.svg"; tipText: "Split (W)"; isActive: activeTool === "split"; accentColor: "#D97706"; activeColor: "#FBBF24"; onClicked: toolSelected("split") }
+        CadToolButton { iconPath: "qrc:/resources/icons/sketch/mirror.svg"; tipText: "Toggle Construction (G)"; accentColor: "#D97706"; onClicked: constraintRequested("toggleConstruction") }
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/fillet.svg"; tipText: "Fillet (F)"; isActive: activeTool === "fillet"; accentColor: "#D97706"; activeColor: "#FBBF24"; onClicked: toolSelected("fillet") }
-        CadToolButton { iconPath: "qrc:/resources/icons/sketch/chamfer.svg"; tipText: "Chamfer (uses fillet)"; isActive: activeTool === "chamfer"; accentColor: "#D97706"; activeColor: "#FBBF24"; onClicked: toolSelected("chamfer") }
-        CadToolButton { iconPath: "qrc:/resources/icons/sketch/extend.svg"; tipText: "Extend (not implemented)"; isDisabled: true; accentColor: "#D97706" }
+        CadToolButton { iconPath: "qrc:/resources/icons/sketch/chamfer.svg"; tipText: "Chamfer"; isActive: activeTool === "chamfer"; accentColor: "#D97706"; activeColor: "#FBBF24"; onClicked: toolSelected("chamfer") }
+        CadToolButton { iconPath: "qrc:/resources/icons/sketch/extend.svg"; tipText: "Extend (X)"; isActive: activeTool === "extend"; accentColor: "#D97706"; activeColor: "#FBBF24"; onClicked: toolSelected("extend") }
 
         Rectangle { width: 1; height: 32; color: "#CBD5E1" }
 
@@ -64,6 +64,11 @@ Rectangle {
         CadToolButton { iconPath: "qrc:/resources/icons/constraint/distance.svg"; tipText: "Distance (D)"; accentColor: "#7C3AED"; onClicked: constraintRequested("distance") }
         CadToolButton { iconPath: "qrc:/resources/icons/constraint/angle.svg"; tipText: "Angle"; accentColor: "#7C3AED"; onClicked: constraintRequested("angle") }
         CadToolButton { iconPath: "qrc:/resources/icons/constraint/radius.svg"; tipText: "Radius"; accentColor: "#7C3AED"; onClicked: constraintRequested("radius") }
+        CadToolButton { iconPath: "qrc:/resources/icons/constraint/distance.svg"; tipText: "Distance X"; accentColor: "#7C3AED"; onClicked: constraintRequested("distanceX") }
+        CadToolButton { iconPath: "qrc:/resources/icons/constraint/distance.svg"; tipText: "Distance Y"; accentColor: "#7C3AED"; onClicked: constraintRequested("distanceY") }
+        CadToolButton { iconPath: "qrc:/resources/icons/constraint/radius.svg"; tipText: "Diameter"; accentColor: "#7C3AED"; onClicked: constraintRequested("diameter") }
+        CadToolButton { iconPath: "qrc:/resources/icons/constraint/symmetric.svg"; tipText: "Symmetric"; accentColor: "#7C3AED"; onClicked: constraintRequested("symmetric") }
+        CadToolButton { iconPath: "qrc:/resources/icons/constraint/midpoint.svg"; tipText: "Point on Object"; accentColor: "#7C3AED"; onClicked: constraintRequested("pointOnObject") }
 
         Item { Layout.fillWidth: true }
 

@@ -3,12 +3,12 @@
 ## Hedef
 FreeCAD'in Sketcher ve PartDesign modüllerindeki TÜM araç, fonksiyon ve yetenekleri hem backend (adapter) hem frontend (QML UI) olarak CADNC'ye entegre et.
 
-## Mevcut Durum Özeti (2026-04-17)
+## Mevcut Durum Özeti (2026-04-17, Faz 1 tamamlandı)
 
 ### Çalışan
-- **Sketch geometri**: Line, Circle, Arc, Rectangle, Point — çizim + solver + render
-- **Sketch constraint**: Coincident, Horizontal, Vertical, Parallel, Perpendicular, Tangent, Equal, Distance, Radius, Angle, Fixed — 11/21 constraint tipi
-- **Sketch tools**: Trim, Fillet — 2/16 tool
+- **Sketch geometri**: Line, Circle, Arc, Rectangle, Point, **Ellipse, BSpline, Polyline** — çizim + solver + render
+- **Sketch constraint**: Coincident, Horizontal, Vertical, Parallel, Perpendicular, Tangent, Equal, Distance, Radius, Angle, Fixed, **DistanceX, DistanceY, Diameter, Symmetric, PointOnObject** — 16/21 constraint tipi
+- **Sketch tools**: Trim, Fillet, **Chamfer (gerçek), Extend, Split, Construction Toggle** — 6/16 tool
 - **Part features**: Pad, Pocket, Revolution — 3/8 sketch-based feature (Part::Extrusion fallback)
 - **File I/O**: FCStd save/load, STEP/IGES/STL/BREP export
 - **UI**: SketchCanvas (grid, axes, geometry render, preview, snap, inference, zoom/pan), ModelTree (delete/rename), ConstraintPanel (datum edit, driving toggle)
@@ -18,39 +18,39 @@ FreeCAD'in Sketcher ve PartDesign modüllerindeki TÜM araç, fonksiyon ve yeten
 
 #### A. Backend Eksikleri (adapter/SketchFacade + PartFacade)
 
-**Sketch Geometri (6 eksik):**
-| Geometri | FreeCAD Sınıfı | Öncelik |
-|----------|---------------|---------|
-| Ellipse | GeomEllipse | YÜKSEK |
-| ArcOfEllipse | GeomArcOfEllipse | ORTA |
-| BSpline | GeomBSplineCurve | YÜKSEK |
-| Polyline | (addLine zinciri) | YÜKSEK |
-| Construction toggle | toggleConstruction() | YÜKSEK |
-| Offset curve | GeomOffsetCurve | DÜŞÜK |
+**Sketch Geometri (2 kalan):**
+| Geometri | FreeCAD Sınıfı | Öncelik | Durum |
+|----------|---------------|---------|-------|
+| ~~Ellipse~~ | GeomEllipse | ~~YÜKSEK~~ | ✅ TAMAMLANDI |
+| ArcOfEllipse | GeomArcOfEllipse | ORTA | Bekliyor |
+| ~~BSpline~~ | GeomBSplineCurve | ~~YÜKSEK~~ | ✅ TAMAMLANDI |
+| ~~Polyline~~ | (addLine zinciri) | ~~YÜKSEK~~ | ✅ TAMAMLANDI |
+| ~~Construction toggle~~ | toggleConstruction() | ~~YÜKSEK~~ | ✅ TAMAMLANDI |
+| Offset curve | GeomOffsetCurve | DÜŞÜK | Bekliyor |
 
-**Sketch Constraint (10 eksik CadEngine methodu):**
+**Sketch Constraint (1 kalan):**
 | Constraint | Durum |
 |-----------|-------|
-| DistanceX | Facade'de var, CadEngine'de yok |
-| DistanceY | Facade'de var, CadEngine'de yok |
-| Diameter | Facade'de var, CadEngine'de yok |
-| Symmetric | Facade'de var, CadEngine'de yok |
-| PointOnObject | Facade'de var, CadEngine'de yok |
-| InternalAlignment | Tamamen eksik |
+| ~~DistanceX~~ | ✅ TAMAMLANDI |
+| ~~DistanceY~~ | ✅ TAMAMLANDI |
+| ~~Diameter~~ | ✅ TAMAMLANDI |
+| ~~Symmetric~~ | ✅ TAMAMLANDI |
+| ~~PointOnObject~~ | ✅ TAMAMLANDI |
+| InternalAlignment | Tamamen eksik (BSpline internal geometry için) |
 
-**Sketch Tools (14 eksik):**
-| Tool | FreeCAD Methodu | Öncelik |
-|------|----------------|---------|
-| Extend | extend() | YÜKSEK |
-| Split | split() | YÜKSEK |
-| Chamfer (gerçek) | fillet(...,chamfer=true) | YÜKSEK |
-| Mirror copy | addSymmetric() | ORTA |
-| Array copy | addCopy() | ORTA |
-| Move geometry | moveGeometry() | ORTA |
-| Construction toggle | toggleConstruction() | YÜKSEK |
-| Carbon copy | carbonCopy() | DÜŞÜK |
-| External geometry | addExternal() | ORTA |
-| Convert to NURBS | convertToNURBS() | DÜŞÜK |
+**Sketch Tools (7 kalan):**
+| Tool | FreeCAD Methodu | Öncelik | Durum |
+|------|----------------|---------|-------|
+| ~~Extend~~ | extend() | ~~YÜKSEK~~ | ✅ TAMAMLANDI |
+| ~~Split~~ | split() | ~~YÜKSEK~~ | ✅ TAMAMLANDI |
+| ~~Chamfer (gerçek)~~ | fillet(...,chamfer=true) | ~~YÜKSEK~~ | ✅ TAMAMLANDI |
+| ~~Construction toggle~~ | toggleConstruction() | ~~YÜKSEK~~ | ✅ TAMAMLANDI |
+| Mirror copy | addSymmetric() | ORTA | Bekliyor |
+| Array copy | addCopy() | ORTA | Bekliyor |
+| Move geometry | moveGeometry() | ORTA | Bekliyor |
+| Carbon copy | carbonCopy() | DÜŞÜK | Bekliyor |
+| External geometry | addExternal() | ORTA | Bekliyor |
+| Convert to NURBS | convertToNURBS() | DÜŞÜK | Bekliyor |
 
 **PartDesign Features (20+ eksik):**
 | Kategori | Feature'lar | Öncelik |
@@ -68,8 +68,8 @@ FreeCAD'in Sketcher ve PartDesign modüllerindeki TÜM araç, fonksiyon ve yeten
 
 #### B. Frontend Eksikleri (QML UI)
 
-**SketchToolbar — stub butonlar (pasifleştirilmiş):**
-- Polyline, Ellipse, Spline, Offset, Mirror, Extend — hepsi disabled
+**SketchToolbar — tüm butonlar aktif:** ✅
+- ~~Polyline, Ellipse, Spline, Offset, Mirror, Extend — hepsi disabled~~ → Tümü enable ve işlevsel
 
 **PartToolbar — bağlantısız butonlar:**
 - Fillet3D, Chamfer3D, Draft, Thickness — UI'da buton var ama backend yok
@@ -95,12 +95,12 @@ FreeCAD'in Sketcher ve PartDesign modüllerindeki TÜM araç, fonksiyon ve yeten
 
 ## Öncelik Sırası (Session İçin)
 
-### Faz 1: Backend Tamamlama — Sketch
-1. **Ellipse + BSpline geometri** → SketchFacade + CadEngine + SketchCanvas render
-2. **Construction toggle** → SketchFacade.toggleConstruction + UI toggle
-3. **Eksik constraint tipleri** → DistanceX/Y, Diameter, Symmetric, PointOnObject CadEngine'e
-4. **Extend + Split tools** → SketchFacade + CadEngine + toolbar enable
-5. **Polyline tool** → SketchCanvas multi-point line chain
+### Faz 1: Backend Tamamlama — Sketch ✅ TAMAMLANDI
+1. ~~**Ellipse + BSpline geometri**~~ ✅
+2. ~~**Construction toggle**~~ ✅
+3. ~~**Eksik constraint tipleri**~~ ✅ (DistanceX/Y, Diameter, Symmetric, PointOnObject)
+4. ~~**Extend + Split + Chamfer tools**~~ ✅
+5. ~~**Polyline tool**~~ ✅
 
 ### Faz 2: Backend Tamamlama — PartDesign  
 6. **PartDesign type registration çöz** → Body/Tip chain

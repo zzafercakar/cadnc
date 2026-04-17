@@ -5,6 +5,7 @@
 #include <Mod/Sketcher/App/Constraint.h>
 #include <Mod/Sketcher/App/GeoEnum.h>
 #include <Mod/Part/App/Geometry.h>
+#include <Mod/Sketcher/App/GeometryFacade.h>
 
 #include <memory>
 #include <cmath>
@@ -90,6 +91,78 @@ int SketchFacade::addPoint(Point2D p, bool construction)
 {
     auto geo = std::make_unique<Part::GeomPoint>(Base::Vector3d(p.x, p.y, 0));
     return impl_->sketch->addGeometry(geo.release(), construction);
+}
+
+int SketchFacade::addEllipse(Point2D center, double majorRadius, double minorRadius,
+                              double angle, bool construction)
+{
+    if (majorRadius < 1e-7 || minorRadius < 1e-7) return -1;
+    try {
+        auto geo = std::make_unique<Part::GeomEllipse>();
+        geo->setCenter(Base::Vector3d(center.x, center.y, 0));
+        geo->setMajorRadius(std::max(majorRadius, minorRadius));
+        geo->setMinorRadius(std::min(majorRadius, minorRadius));
+        if (std::abs(angle) > 1e-9) {
+            geo->setMajorAxisDir(Base::Vector3d(std::cos(angle), std::sin(angle), 0));
+        }
+        return impl_->sketch->addGeometry(geo.release(), construction);
+    } catch (...) { return -1; }
+}
+
+int SketchFacade::addBSpline(const std::vector<Point2D>& poles, int degree,
+                              bool periodic, bool construction)
+{
+    if (poles.size() < 2) return -1;
+    try {
+        std::vector<Base::Vector3d> pts;
+        pts.reserve(poles.size());
+        for (const auto& p : poles)
+            pts.emplace_back(p.x, p.y, 0);
+
+        int nPoles = static_cast<int>(pts.size());
+        int deg = std::min(degree, nPoles - 1);
+
+        // Build clamped uniform knot vector
+        std::vector<double> knots;
+        std::vector<int> mults;
+        knots.push_back(0.0);
+        mults.push_back(deg + 1);
+        for (int i = 1; i < nPoles - deg; ++i) {
+            knots.push_back(static_cast<double>(i));
+            mults.push_back(1);
+        }
+        knots.push_back(static_cast<double>(std::max(1, nPoles - deg)));
+        mults.push_back(deg + 1);
+
+        std::vector<double> weights(nPoles, 1.0);
+
+        auto geo = std::make_unique<Part::GeomBSplineCurve>(pts, weights, knots, mults, deg, false, periodic);
+        int geoId = impl_->sketch->addGeometry(geo.release(), construction);
+
+        // Expose internal geometry (control points, knot points) for solver
+        if (geoId >= 0) {
+            try { impl_->sketch->exposeInternalGeometry(geoId); } catch (...) {}
+        }
+        return geoId;
+    } catch (...) { return -1; }
+}
+
+int SketchFacade::addPolyline(const std::vector<Point2D>& points, bool construction)
+{
+    if (points.size() < 2) return -1;
+    try {
+        int firstId = -1;
+        int prevId = -1;
+        for (size_t i = 0; i + 1 < points.size(); ++i) {
+            int id = addLine(points[i], points[i + 1], construction);
+            if (i == 0) firstId = id;
+            if (prevId >= 0 && id >= 0) {
+                addCoincident(prevId, 2, id, 1);
+            }
+            prevId = id;
+        }
+        return firstId;
+    } catch (...) { return -1; }
 }
 
 void SketchFacade::removeGeometry(int geoId)
@@ -234,9 +307,31 @@ int SketchFacade::fillet(int geoId1, int geoId2, double radius)
 
 int SketchFacade::chamfer(int geoId1, int geoId2, double size)
 {
-    // SketchObject has no direct chamfer — use fillet as placeholder
+    // FreeCAD fillet with chamfer=true creates a real chamfer
     try {
-        return impl_->sketch->fillet(geoId1, static_cast<Sketcher::PointPos>(geoId2), size);
+        return impl_->sketch->fillet(geoId1, static_cast<Sketcher::PointPos>(geoId2),
+                                      size, true, false, true);
+    } catch (...) { return -1; }
+}
+
+int SketchFacade::extend(int geoId, double increment, int endPointPos)
+{
+    try {
+        return impl_->sketch->extend(geoId, increment, static_cast<Sketcher::PointPos>(endPointPos));
+    } catch (...) { return -1; }
+}
+
+int SketchFacade::split(int geoId, Point2D point)
+{
+    try {
+        return impl_->sketch->split(geoId, Base::Vector3d(point.x, point.y, 0));
+    } catch (...) { return -1; }
+}
+
+int SketchFacade::toggleConstruction(int geoId)
+{
+    try {
+        return impl_->sketch->toggleConstruction(geoId);
     } catch (...) { return -1; }
 }
 
@@ -270,6 +365,10 @@ std::vector<GeoInfo> SketchFacade::geometry() const
         GeoInfo info;
         info.id = i;
 
+        // Read construction flag via GeometryFacade
+        auto geoFacade = impl_->sketch->getGeometryFacade(i);
+        if (geoFacade) info.construction = geoFacade->getConstruction();
+
         if (auto* ls = dynamic_cast<const Part::GeomLineSegment*>(geos[i])) {
             info.type = "Line";
             auto p1 = ls->getStartPoint();
@@ -297,6 +396,22 @@ std::vector<GeoInfo> SketchFacade::geometry() const
             info.type = "Point";
             auto loc = dynamic_cast<const Part::GeomPoint*>(geos[i])->getPoint();
             info.center = {loc.x, loc.y};
+        }
+        else if (auto* el = dynamic_cast<const Part::GeomEllipse*>(geos[i])) {
+            info.type = "Ellipse";
+            auto ctr = el->getCenter();
+            info.center = {ctr.x, ctr.y};
+            info.majorRadius = el->getMajorRadius();
+            info.minorRadius = el->getMinorRadius();
+            auto dir = el->getMajorAxisDir();
+            info.angle = std::atan2(dir.y, dir.x);
+        }
+        else if (auto* bs = dynamic_cast<const Part::GeomBSplineCurve*>(geos[i])) {
+            info.type = "BSpline";
+            auto bsPoles = bs->getPoles();
+            for (const auto& p : bsPoles)
+                info.poles.push_back({p.x, p.y});
+            info.degree = bs->getDegree();
         }
         else {
             info.type = "Other";
@@ -332,6 +447,12 @@ std::vector<ConstraintInfo> SketchFacade::constraints() const
             case Sketcher::Parallel:      info.type = ConstraintType::Parallel; break;
             case Sketcher::Tangent:       info.type = ConstraintType::Tangent; break;
             case Sketcher::Equal:         info.type = ConstraintType::Equal; break;
+            case Sketcher::Symmetric:     info.type = ConstraintType::Symmetric; break;
+            case Sketcher::DistanceX:     info.type = ConstraintType::DistanceX; break;
+            case Sketcher::DistanceY:     info.type = ConstraintType::DistanceY; break;
+            case Sketcher::Diameter:      info.type = ConstraintType::Diameter; break;
+            case Sketcher::PointOnObject: info.type = ConstraintType::PointOnObject; break;
+            case Sketcher::Block:         info.type = ConstraintType::Fixed; break;
             default:                      info.type = ConstraintType::Coincident; break;
         }
         result.push_back(std::move(info));

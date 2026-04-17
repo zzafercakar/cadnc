@@ -23,7 +23,7 @@ import "."
 Item {
     id: canvas
 
-    property string tool: ""         // "line", "circle", "rectangle", "arc", "point", ""
+    property string tool: ""         // "line", "circle", "rectangle", "arc", "point", "ellipse", "polyline", "bspline", "trim", "fillet", "chamfer", "extend", "split"
     property int selectedGeo: -1     // selected geometry id
 
     // Grid
@@ -46,6 +46,7 @@ Item {
     property real startY: 0
     property real currentSketchX: 0
     property real currentSketchY: 0
+    property var polylinePoints: []
 
     // ── Coordinate conversion ──────────────────────────────────────
     function toScreen(sx, sy) { return Qt.point(panX + sx * viewScale, panY - sy * viewScale) }
@@ -98,6 +99,21 @@ Item {
                 }
             } else if (g.type === "Point") {
                 checkSnap(best, sx, sy, g.centerX, g.centerY, "endpoint")
+            }
+            else if (g.type === "Ellipse") {
+                checkSnap(best, sx, sy, g.centerX, g.centerY, "center")
+                var eca = Math.cos(g.angle || 0), esa = Math.sin(g.angle || 0)
+                checkSnap(best, sx, sy, g.centerX + (g.majorRadius || 0) * eca, g.centerY + (g.majorRadius || 0) * esa, "endpoint")
+                checkSnap(best, sx, sy, g.centerX - (g.majorRadius || 0) * eca, g.centerY - (g.majorRadius || 0) * esa, "endpoint")
+                checkSnap(best, sx, sy, g.centerX - (g.minorRadius || 0) * esa, g.centerY + (g.minorRadius || 0) * eca, "endpoint")
+                checkSnap(best, sx, sy, g.centerX + (g.minorRadius || 0) * esa, g.centerY - (g.minorRadius || 0) * eca, "endpoint")
+            }
+            else if (g.type === "BSpline") {
+                var bspoles = g.poles
+                if (bspoles) {
+                    for (var bsp = 0; bsp < bspoles.length; bsp++)
+                        checkSnap(best, sx, sy, bspoles[bsp].x, bspoles[bsp].y, "endpoint")
+                }
             }
             // Origin point snap
             checkSnap(best, sx, sy, 0, 0, "endpoint")
@@ -203,6 +219,12 @@ Item {
                 ctx.lineWidth = isSel ? 2.5 : 1.8
                 ctx.setLineDash([])
 
+                // Construction geometry: dashed gray
+                if (g.construction) {
+                    ctx.strokeStyle = isSel ? canvas.colSelected : canvas.colConstruction
+                    ctx.setLineDash([6, 3])
+                }
+
                 if (g.type === "Line") {
                     var lp1 = toScreen(g.startX, g.startY)
                     var lp2 = toScreen(g.endX, g.endY)
@@ -241,6 +263,75 @@ Item {
                     var pp = toScreen(g.centerX, g.centerY)
                     ctx.fillStyle = isSel ? canvas.colSelected : canvas.colDefault
                     ctx.beginPath(); ctx.arc(pp.x, pp.y, 4, 0, 2 * Math.PI); ctx.fill()
+                }
+                else if (g.type === "Ellipse") {
+                    var ec = toScreen(g.centerX, g.centerY)
+                    var majR = (g.majorRadius || 1) * viewScale
+                    var minR = (g.minorRadius || 1) * viewScale
+                    ctx.save()
+                    ctx.translate(ec.x, ec.y)
+                    ctx.rotate(-(g.angle || 0))
+                    ctx.scale(1, minR / Math.max(majR, 0.01))
+                    ctx.beginPath()
+                    ctx.arc(0, 0, majR, 0, 2 * Math.PI)
+                    ctx.restore()
+                    ctx.stroke()
+                    drawCenterMarker(ctx, ec.x, ec.y, isSel)
+                }
+                else if (g.type === "BSpline") {
+                    var poles = g.poles
+                    if (poles && poles.length >= 2) {
+                        // Control polygon (dashed, faint)
+                        ctx.save()
+                        ctx.strokeStyle = isSel ? canvas.colSelected : "rgba(100, 100, 100, 0.4)"
+                        ctx.lineWidth = 0.8
+                        ctx.setLineDash([3, 3])
+                        ctx.beginPath()
+                        var bcp0 = toScreen(poles[0].x, poles[0].y)
+                        ctx.moveTo(bcp0.x, bcp0.y)
+                        for (var bci = 1; bci < poles.length; bci++) {
+                            var bcpi = toScreen(poles[bci].x, poles[bci].y)
+                            ctx.lineTo(bcpi.x, bcpi.y)
+                        }
+                        ctx.stroke()
+                        ctx.restore()
+
+                        // Smooth curve via Catmull-Rom → cubic bezier
+                        ctx.strokeStyle = isSel ? canvas.colSelected : (solverOk ? canvas.colConstrained : canvas.colDefault)
+                        ctx.lineWidth = isSel ? 2.5 : 1.8
+                        ctx.setLineDash([])
+                        ctx.beginPath()
+                        var bp0 = toScreen(poles[0].x, poles[0].y)
+                        ctx.moveTo(bp0.x, bp0.y)
+                        if (poles.length === 2) {
+                            var bp1 = toScreen(poles[1].x, poles[1].y)
+                            ctx.lineTo(bp1.x, bp1.y)
+                        } else if (poles.length === 3) {
+                            var bqp1 = toScreen(poles[1].x, poles[1].y)
+                            var bqp2 = toScreen(poles[2].x, poles[2].y)
+                            ctx.quadraticCurveTo(bqp1.x, bqp1.y, bqp2.x, bqp2.y)
+                        } else {
+                            for (var bsi = 0; bsi < poles.length - 1; bsi++) {
+                                var s0 = toScreen(poles[Math.max(0, bsi-1)].x, poles[Math.max(0, bsi-1)].y)
+                                var s1 = toScreen(poles[bsi].x, poles[bsi].y)
+                                var s2 = toScreen(poles[Math.min(poles.length-1, bsi+1)].x, poles[Math.min(poles.length-1, bsi+1)].y)
+                                var s3 = toScreen(poles[Math.min(poles.length-1, bsi+2)].x, poles[Math.min(poles.length-1, bsi+2)].y)
+                                var c1x = s1.x + (s2.x - s0.x) / 6
+                                var c1y = s1.y + (s2.y - s0.y) / 6
+                                var c2x = s2.x - (s3.x - s1.x) / 6
+                                var c2y = s2.y - (s3.y - s1.y) / 6
+                                ctx.bezierCurveTo(c1x, c1y, c2x, c2y, s2.x, s2.y)
+                            }
+                        }
+                        ctx.stroke()
+
+                        // Control point markers (small squares)
+                        for (var bpi = 0; bpi < poles.length; bpi++) {
+                            var bpp = toScreen(poles[bpi].x, poles[bpi].y)
+                            ctx.fillStyle = isSel ? canvas.colSelected : "#6366F1"
+                            ctx.fillRect(bpp.x - 3, bpp.y - 3, 6, 6)
+                        }
+                    }
                 }
             }
         }
@@ -324,6 +415,50 @@ Item {
                 ctx.globalAlpha = 1.0
                 // Radius line
                 ctx.beginPath(); ctx.moveTo(sp.x, sp.y); ctx.lineTo(ep.x, ep.y); ctx.stroke()
+            }
+            else if (tool === "ellipse") {
+                var emajR = Math.abs(currentSketchX - startX) * viewScale
+                var eminR = Math.abs(currentSketchY - startY) * viewScale
+                if (emajR > 1 || eminR > 1) {
+                    ctx.save()
+                    ctx.translate(sp.x, sp.y)
+                    ctx.scale(1, eminR / Math.max(emajR, 0.01))
+                    ctx.beginPath()
+                    ctx.arc(0, 0, emajR, 0, 2 * Math.PI)
+                    ctx.restore()
+                    ctx.stroke()
+                    ctx.setLineDash([])
+                    ctx.fillStyle = "#3B82F6"
+                    ctx.font = "11px monospace"
+                    var emjV = Math.abs(currentSketchX - startX)
+                    var emnV = Math.abs(currentSketchY - startY)
+                    ctx.fillText(emjV.toFixed(1) + " x " + emnV.toFixed(1), sp.x + 8, sp.y - 8)
+                }
+            }
+            else if (tool === "polyline" || tool === "bspline") {
+                ctx.beginPath()
+                if (polylinePoints.length >= 1) {
+                    var plp0 = toScreen(polylinePoints[0].x, polylinePoints[0].y)
+                    ctx.moveTo(plp0.x, plp0.y)
+                    for (var pli = 1; pli < polylinePoints.length; pli++) {
+                        var plpi = toScreen(polylinePoints[pli].x, polylinePoints[pli].y)
+                        ctx.lineTo(plpi.x, plpi.y)
+                    }
+                    ctx.lineTo(ep.x, ep.y)
+                } else if (drawing) {
+                    ctx.moveTo(sp.x, sp.y)
+                    ctx.lineTo(ep.x, ep.y)
+                }
+                ctx.stroke()
+                // BSpline control point markers
+                if (tool === "bspline") {
+                    ctx.setLineDash([])
+                    ctx.fillStyle = "#6366F1"
+                    for (var bmi = 0; bmi < polylinePoints.length; bmi++) {
+                        var bmp = toScreen(polylinePoints[bmi].x, polylinePoints[bmi].y)
+                        ctx.fillRect(bmp.x - 3, bmp.y - 3, 6, 6)
+                    }
+                }
             }
             ctx.setLineDash([])
         }
@@ -423,6 +558,34 @@ Item {
                     return
                 }
 
+                if (tool === "polyline" || tool === "bspline") {
+                    if (!drawing) {
+                        polylinePoints = [{"x": sk.x, "y": sk.y}]
+                        drawing = true
+                    } else {
+                        polylinePoints.push({"x": sk.x, "y": sk.y})
+                    }
+                    drawCanvas.requestPaint()
+                    return
+                }
+
+                if (tool === "extend") {
+                    selectAt(mouse.x, mouse.y)
+                    if (selectedGeo >= 0) {
+                        cadEngine.extendGeo(selectedGeo, 10.0, 2)
+                    }
+                    return
+                }
+
+                if (tool === "split") {
+                    selectAt(mouse.x, mouse.y)
+                    if (selectedGeo >= 0) {
+                        cadEngine.splitAtPoint(selectedGeo, sk.x, sk.y)
+                        selectedGeo = -1
+                    }
+                    return
+                }
+
                 if (!drawing) {
                     startX = sk.x; startY = sk.y
                     drawing = true
@@ -438,8 +601,21 @@ Item {
 
             // Right button → cancel drawing
             if (mouse.button === Qt.RightButton) {
-                if (drawing) {
+                if ((tool === "polyline" || tool === "bspline") && drawing && polylinePoints.length >= 2) {
+                    if (tool === "polyline") {
+                        var plPts = []
+                        for (var pfi = 0; pfi < polylinePoints.length; pfi++)
+                            plPts.push({"x": polylinePoints[pfi].x, "y": polylinePoints[pfi].y})
+                        cadEngine.addPolyline(plPts)
+                    } else {
+                        cadEngine.addBSpline(polylinePoints)
+                    }
+                    polylinePoints = []
                     drawing = false
+                    drawCanvas.requestPaint()
+                } else if (drawing) {
+                    drawing = false
+                    polylinePoints = []
                     drawCanvas.requestPaint()
                 } else {
                     tool = ""
@@ -487,6 +663,12 @@ Item {
             var endAngle = Math.atan2(ady, adx) * 180.0 / Math.PI
             if (arcR > 0.01) cadEngine.addArc(startX, startY, arcR, 0, endAngle)
         }
+        else if (tool === "ellipse") {
+            var emajR = Math.abs(ex - startX)
+            var eminR = Math.abs(ey - startY)
+            if (emajR > 0.01 || eminR > 0.01)
+                cadEngine.addEllipse(startX, startY, emajR, eminR, 0)
+        }
         // Tool stays active for continuous drawing
     }
 
@@ -511,6 +693,24 @@ Item {
                 d = Math.abs(dac - g.radius)
             } else if (g.type === "Point") {
                 d = Math.sqrt((sk.x - g.centerX)*(sk.x - g.centerX) + (sk.y - g.centerY)*(sk.y - g.centerY))
+            }
+            else if (g.type === "Ellipse") {
+                var edx = sk.x - g.centerX, edy = sk.y - g.centerY
+                var eca2 = Math.cos(g.angle || 0), esa2 = Math.sin(g.angle || 0)
+                var elx = edx * eca2 + edy * esa2, ely = -edx * esa2 + edy * eca2
+                var majR = g.majorRadius || 1, minR = g.minorRadius || 1
+                var normDist = Math.sqrt((elx*elx)/(majR*majR) + (ely*ely)/(minR*minR))
+                d = Math.abs(normDist - 1.0) * Math.max(majR, minR)
+            }
+            else if (g.type === "BSpline") {
+                var bspoles2 = g.poles
+                if (bspoles2 && bspoles2.length >= 2) {
+                    d = 999999
+                    for (var bsi2 = 0; bsi2 < bspoles2.length - 1; bsi2++) {
+                        var bsd = distToSegment(sk.x, sk.y, bspoles2[bsi2].x, bspoles2[bsi2].y, bspoles2[bsi2+1].x, bspoles2[bsi2+1].y)
+                        if (bsd < d) d = bsd
+                    }
+                }
             }
 
             if (d < minDist) { minDist = d; selectedGeo = g.id }
