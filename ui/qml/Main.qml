@@ -335,10 +335,6 @@ ApplicationWindow {
                 cadEngine.closeSketch()
                 mainWindow.activeDrawTool = ""
                 mainWindow.currentWorkbench = 0
-                // SolidWorks/FreeCAD workflow: after closing sketch, offer Pad dialog
-                if (cadEngine.sketchNames.length > 0) {
-                    padDialog.open()
-                }
             }
         }
         PartToolbar {
