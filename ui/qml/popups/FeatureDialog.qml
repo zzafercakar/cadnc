@@ -183,6 +183,10 @@ Popup {
 
     onOpened: {
         valueField.text = cfg.defaultVal
+        // Always select the last sketch (most recently created/closed)
+        if (cadEngine.sketchNames.length > 0) {
+            sketchCombo.currentIndex = cadEngine.sketchNames.length - 1
+        }
         valueField.forceActiveFocus()
         valueField.selectAll()
     }

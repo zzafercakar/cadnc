@@ -47,6 +47,9 @@ bool CadEngine::newDocument(const QString& name)
         document_.reset();
     }
 
+    // Clear 3D viewport — remove all shapes from previous document
+    if (viewport_) viewport_->clearShapes();
+
     document_ = session_->newDocument(name.toStdString());
     documentPath_.clear();
     if (document_) {
@@ -144,6 +147,7 @@ void CadEngine::closeDocument()
     if (activeSketch_) closeSketch();
     document_.reset();
     documentPath_.clear();
+    if (viewport_) viewport_->clearShapes();
     setStatus("Document closed");
     Q_EMIT featureTreeChanged();
     Q_EMIT sketchChanged();
@@ -215,8 +219,9 @@ bool CadEngine::createSketch(const QString& name, int planeType)
         activeSketchName_ = name.toStdString();
         setStatus(QString("Sketch created: %1 (%2 plane)").arg(name, pn));
 
-        // Keep sketch wireframe visible in OCCT viewport during editing
-        // (QML Canvas overlay only renders snap markers, not geometry)
+        // Clear 3D shapes during sketch editing — the QML SketchCanvas renders
+        // 2D geometry as an overlay; showing the 3D solid underneath is confusing
+        if (viewport_) viewport_->clearShapes();
 
         // Orient viewport camera to face the sketch plane
         if (viewport_) {
@@ -242,8 +247,8 @@ bool CadEngine::openSketch(const QString& name)
         activeSketchName_ = name.toStdString();
         setStatus("Editing sketch: " + name);
 
-        // Refresh viewport to show latest sketch wireframe
-        updateViewportShapes();
+        // Clear 3D shapes during sketch editing
+        if (viewport_) viewport_->clearShapes();
 
         Q_EMIT sketchChanged();
         return true;
@@ -1164,31 +1169,10 @@ void CadEngine::updateViewportShapes()
         TopoDS_Shape shape = partFeature->Shape.getShape().getShape(); // copy
         if (shape.IsNull()) continue;
 
-        // Color based on feature type
-        Quantity_Color color(0.5, 0.7, 0.9, Quantity_TOC_sRGB);  // default blue
+        // Color: metallic gray for all solids (SolidWorks style), teal for sketch wireframe
+        Quantity_Color color(0.72, 0.72, 0.75, Quantity_TOC_sRGB);  // metallic silver-gray
         if (isSketch)
-            color = Quantity_Color(0.02, 0.6, 0.4, Quantity_TOC_sRGB);    // teal wireframe
-        else if (f.typeName.find("Pad") != std::string::npos)
-            color = Quantity_Color(0.4, 0.75, 0.45, Quantity_TOC_sRGB);   // green
-        else if (f.typeName.find("Pocket") != std::string::npos)
-            color = Quantity_Color(0.85, 0.4, 0.35, Quantity_TOC_sRGB);   // red
-        else if (f.typeName.find("Revolution") != std::string::npos)
-            color = Quantity_Color(0.35, 0.55, 0.9, Quantity_TOC_sRGB);   // blue
-        else if (f.typeName.find("Groove") != std::string::npos)
-            color = Quantity_Color(0.7, 0.4, 0.35, Quantity_TOC_sRGB);   // dark red
-        else if (f.typeName.find("Box") != std::string::npos
-              || f.typeName.find("Cylinder") != std::string::npos
-              || f.typeName.find("Sphere") != std::string::npos
-              || f.typeName.find("Cone") != std::string::npos)
-            color = Quantity_Color(0.6, 0.7, 0.8, Quantity_TOC_sRGB);   // light steel
-        else if (f.typeName.find("Fillet") != std::string::npos
-              || f.typeName.find("Chamfer") != std::string::npos)
-            color = Quantity_Color(0.5, 0.8, 0.6, Quantity_TOC_sRGB);   // mint
-        else if (f.typeName.find("Fuse") != std::string::npos)
-            color = Quantity_Color(0.45, 0.7, 0.85, Quantity_TOC_sRGB); // cyan
-        else if (f.typeName.find("Cut") != std::string::npos
-              || f.typeName.find("Common") != std::string::npos)
-            color = Quantity_Color(0.85, 0.55, 0.4, Quantity_TOC_sRGB); // orange
+            color = Quantity_Color(0.02, 0.6, 0.4, Quantity_TOC_sRGB);  // teal wireframe
 
         // Sketches shown as wireframe, solids as shaded
         viewport_->displayShape(f.name, shape, color, isSketch);

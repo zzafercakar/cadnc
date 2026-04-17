@@ -28,7 +28,9 @@ Item {
 
     // Grid
     property bool gridVisible: true
-    property real gridSpacing: 10.0   // mm
+    onGridVisibleChanged: drawCanvas.requestPaint()
+    property real gridSpacing: 10.0   // mm (base unit)
+    property real activeGridSpacing: gridSpacing  // actual visible grid spacing (adaptive)
 
     // Snap
     property bool snapEnabled: true
@@ -67,7 +69,7 @@ Item {
     readonly property color colSnapInference: Qt.rgba(0/255, 168/255, 220/255, 0.4)
 
     // ── Snap engine ────────────────────────────────────────────────
-    function snapToGrid(val) { return Math.round(val / gridSpacing) * gridSpacing }
+    function snapToGrid(val) { return Math.round(val / activeGridSpacing) * activeGridSpacing }
 
     function snapped(sx, sy) {
         if (!snapEnabled) { snapType = ""; return Qt.point(sx, sy) }
@@ -154,13 +156,17 @@ Item {
 
         // ── Grid ───────────────────────────────────────────────────
         function drawGrid(ctx) {
-            if (!canvas.gridVisible) return
-
+            // Always compute active grid spacing (even if not visible) so snap stays in sync
             var baseStep = viewScale * canvas.gridSpacing
             var step = baseStep
             if (step < 12) step = baseStep * 5
             if (step < 12) step = baseStep * 10
             if (step > 200) step = baseStep / 5
+
+            // Store the actual grid spacing in sketch units for snap
+            canvas.activeGridSpacing = step / viewScale
+
+            if (!canvas.gridVisible) return
 
             // Minor grid — dots
             ctx.fillStyle = canvas.colGridMinor
@@ -514,7 +520,7 @@ Item {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         hoverEnabled: true  // always hover to show snap markers + coordinates
-        propagateComposedEvents: true
+        propagateComposedEvents: false  // we handle all buttons in sketch mode
 
         property real lastMx: 0
         property real lastMy: 0
