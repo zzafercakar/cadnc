@@ -78,6 +78,7 @@ public:
     Q_INVOKABLE bool saveDocument();
     Q_INVOKABLE bool saveDocumentAs(const QString& filePath);
     Q_INVOKABLE bool exportDocument(const QString& filePath);
+    Q_INVOKABLE bool importFile(const QString& filePath);
     Q_INVOKABLE void closeDocument();
     Q_INVOKABLE void undo();
     Q_INVOKABLE void redo();

@@ -45,6 +45,9 @@ public:
     /// Export document to format determined by extension (STEP, IGES, STL, BREP, etc.)
     bool exportTo(const std::string& path) const;
 
+    /// Import geometry from STEP/IGES/BREP file into the document
+    bool importFrom(const std::string& path);
+
     /// Get the internal App::Document pointer (opaque)
     void* internalDoc() const;
 

@@ -664,8 +664,14 @@ ApplicationWindow {
         fileMode: FileDialog.OpenFile
         onAccepted: {
             var path = selectedFile.toString().replace("file://", "")
-            if (cadEngine.openDocument(path)) {
-                mainWindow.title = "CADNC v" + appVersion + " — " + path.split("/").pop()
+            var ext = path.split(".").pop().toLowerCase()
+            if (ext === "fcstd") {
+                if (cadEngine.openDocument(path))
+                    mainWindow.title = "CADNC v" + appVersion + " — " + path.split("/").pop()
+            } else {
+                // STEP/IGES/BREP/STL → import geometry
+                if (cadEngine.importFile(path))
+                    mainWindow.title = "CADNC v" + appVersion + " — " + path.split("/").pop()
             }
         }
     }

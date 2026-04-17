@@ -119,6 +119,26 @@ bool CadEngine::exportDocument(const QString& filePath)
     return ok;
 }
 
+bool CadEngine::importFile(const QString& filePath)
+{
+    if (filePath.isEmpty()) return false;
+
+    // Auto-create document if none exists
+    if (!document_) {
+        if (!newDocument("Untitled")) return false;
+    }
+
+    bool ok = document_->importFrom(filePath.toStdString());
+    if (ok) {
+        setStatus("Imported: " + filePath);
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    } else {
+        setStatus("Import failed: " + filePath);
+    }
+    return ok;
+}
+
 void CadEngine::closeDocument()
 {
     if (activeSketch_) closeSketch();

@@ -12,6 +12,7 @@
 #include <Base/Rotation.h>
 #include <Mod/Sketcher/App/SketchObject.h>
 #include <Mod/Part/App/PartFeature.h>
+#include <Mod/Part/App/TopoShape.h>
 #include <Mod/PartDesign/App/Body.h>
 
 namespace CADNC {
@@ -151,6 +152,55 @@ bool CadDocument::exportTo(const std::string& path) const
         Base::Console().error("CADNC: Export failed: %s\n", e.what());
     } catch (...) {
         Base::Console().error("CADNC: Export failed\n");
+    }
+    return false;
+}
+
+bool CadDocument::importFrom(const std::string& path)
+{
+    if (!impl_->doc) return false;
+
+    // Determine format from file extension
+    std::string ext;
+    auto dot = path.rfind('.');
+    if (dot != std::string::npos) {
+        ext = path.substr(dot + 1);
+        for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+
+    try {
+        Part::TopoShape shape;
+
+        if (ext == "step" || ext == "stp") {
+            shape.importStep(path.c_str());
+        } else if (ext == "iges" || ext == "igs") {
+            shape.importIges(path.c_str());
+        } else if (ext == "brep" || ext == "brp") {
+            shape.importBrep(path.c_str());
+        } else {
+            Base::Console().error("CADNC: Unsupported import format: %s\n", ext.c_str());
+            return false;
+        }
+
+        if (shape.getShape().IsNull()) {
+            Base::Console().error("CADNC: Import produced empty shape\n");
+            return false;
+        }
+
+        // Create a Part::Feature to hold the imported shape
+        auto* obj = impl_->doc->addObject("Part::Feature", "Import");
+        if (!obj) return false;
+
+        auto* feature = dynamic_cast<Part::Feature*>(obj);
+        if (!feature) return false;
+
+        feature->Shape.setValue(shape);
+        impl_->doc->recompute();
+        return true;
+    } catch (const Base::Exception& e) {
+        Base::Console().error("CADNC: Import failed: %s\n", e.what());
+    } catch (...) {
+        Base::Console().error("CADNC: Import failed\n");
     }
     return false;
 }
