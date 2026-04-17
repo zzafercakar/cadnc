@@ -105,6 +105,30 @@ Rectangle {
                         }
                     }
 
+                    // Constraint type icon
+                    Image {
+                        width: 16; height: 16
+                        sourceSize: Qt.size(16, 16)
+                        opacity: isDriving ? 0.85 : 0.45
+                        source: {
+                            var t = modelData.typeName || ""
+                            if (t === "Coincident") return "qrc:/resources/icons/constraint/coincident.svg"
+                            if (t === "Horizontal") return "qrc:/resources/icons/constraint/horiz.svg"
+                            if (t === "Vertical") return "qrc:/resources/icons/constraint/vert.svg"
+                            if (t === "Parallel") return "qrc:/resources/icons/constraint/parallel.svg"
+                            if (t === "Perpendicular") return "qrc:/resources/icons/constraint/perp.svg"
+                            if (t === "Tangent") return "qrc:/resources/icons/constraint/tangent.svg"
+                            if (t === "Equal") return "qrc:/resources/icons/constraint/equal.svg"
+                            if (t === "Fixed") return "qrc:/resources/icons/constraint/fixed.svg"
+                            if (t === "Distance" || t === "DistanceX" || t === "DistanceY") return "qrc:/resources/icons/constraint/distance.svg"
+                            if (t === "Angle") return "qrc:/resources/icons/constraint/angle.svg"
+                            if (t === "Radius" || t === "Diameter") return "qrc:/resources/icons/constraint/radius.svg"
+                            if (t === "Symmetric") return "qrc:/resources/icons/constraint/symmetric.svg"
+                            if (t === "PointOnObject") return "qrc:/resources/icons/constraint/midpoint.svg"
+                            return "qrc:/resources/icons/constraint/fixed.svg"
+                        }
+                    }
+
                     Text {
                         text: modelData.typeName || "Constraint"
                         font.pixelSize: Theme.fontBase

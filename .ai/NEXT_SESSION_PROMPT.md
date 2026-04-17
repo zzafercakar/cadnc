@@ -52,19 +52,23 @@ FreeCAD'in Sketcher ve PartDesign modüllerindeki TÜM araç, fonksiyon ve yeten
 | External geometry | addExternal() | ORTA | Bekliyor |
 | Convert to NURBS | convertToNURBS() | DÜŞÜK | Bekliyor |
 
-**PartDesign Features (20+ eksik):**
-| Kategori | Feature'lar | Öncelik |
-|----------|-----------|---------|
-| Sketch-based | Groove, Loft, Pipe/Sweep, Helix, Hole | YÜKSEK |
-| Dress-up | 3D Fillet, 3D Chamfer, Draft, Thickness | YÜKSEK |
-| Pattern | LinearPattern, PolarPattern, Mirror, MultiTransform | ORTA |
-| Primitive | Box, Cylinder, Sphere, Cone, Torus, Prism, Wedge, Ellipsoid | ORTA |
-| Boolean | Union, Cut, Common | YÜKSEK |
-| Datum | Plane, Line, Point, CoordinateSystem | ORTA |
-| Binder | ShapeBinder, SubShapeBinder | DÜŞÜK |
+**PartDesign Features (kalan):**
+| Kategori | Feature'lar | Öncelik | Durum |
+|----------|-----------|---------|-------|
+| Sketch-based | ~~Groove~~ | ~~YÜKSEK~~ | ✅ TAMAMLANDI |
+| Sketch-based | Loft, Pipe/Sweep, Helix, Hole | ORTA | Bekliyor (complex multi-profile) |
+| Dress-up | ~~3D Fillet, 3D Chamfer~~ (UseAllEdges) | ~~YÜKSEK~~ | ✅ TAMAMLANDI |
+| Dress-up | Draft, Thickness | ORTA | Bekliyor |
+| Pattern | ~~LinearPattern, PolarPattern, Mirror~~ | ~~ORTA~~ | ✅ TAMAMLANDI |
+| Pattern | MultiTransform | DÜŞÜK | Bekliyor |
+| Primitive | ~~Box, Cylinder, Sphere, Cone~~ | ~~ORTA~~ | ✅ TAMAMLANDI |
+| Primitive | Torus, Prism, Wedge, Ellipsoid | DÜŞÜK | Bekliyor |
+| Boolean | ~~Union, Cut, Common~~ | ~~YÜKSEK~~ | ✅ TAMAMLANDI |
+| Datum | Plane, Line, Point, CoordinateSystem | ORTA | Bekliyor |
+| Binder | ShapeBinder, SubShapeBinder | DÜŞÜK | Bekliyor |
 
-**File I/O (3 eksik):**
-- Import STEP/IGES/BREP (sadece FCStd load var)
+**File I/O:**
+- ~~Import STEP/IGES/BREP~~ ✅ TAMAMLANDI (TopoShape API)
 
 #### B. Frontend Eksikleri (QML UI)
 
@@ -102,20 +106,21 @@ FreeCAD'in Sketcher ve PartDesign modüllerindeki TÜM araç, fonksiyon ve yeten
 4. ~~**Extend + Split + Chamfer tools**~~ ✅
 5. ~~**Polyline tool**~~ ✅
 
-### Faz 2: Backend Tamamlama — PartDesign  
-6. **PartDesign type registration çöz** → Body/Tip chain
-7. **3D Fillet/Chamfer** → edge selection + PartFacade implement + CadEngine wire
-8. **Boolean operations** → Union/Cut/Common
-9. **LinearPattern/PolarPattern/Mirror** → CadEngine wire (PartFacade stub'lar var)
-10. **Groove, Loft, Pipe, Helix** → PartFacade + CadEngine + FeatureDialog
+### Faz 2: Backend Tamamlama — PartDesign ✅ TAMAMLANDI
+6. ~~**PartDesign type registration**~~ → workaround: direct instantiation + Part fallback ✅
+7. ~~**3D Fillet/Chamfer**~~ → UseAllEdges mode ✅
+8. ~~**Boolean operations**~~ → Part::Fuse/Cut/Common ✅
+9. ~~**LinearPattern/PolarPattern/Mirror**~~ → PartDesign::Transformed ✅
+10. ~~**Groove**~~ → PartDesign::Groove + Part::Revolution fallback ✅
+11. ~~**Primitives**~~ → Part::Box/Cylinder/Sphere/Cone ✅
 
-### Faz 3: File I/O
-11. **Import STEP/IGES/BREP** → CadDocument.importFrom() + UI open dialog
+### Faz 3: File I/O ✅ TAMAMLANDI
+12. ~~**Import STEP/IGES/BREP**~~ → CadDocument::importFrom() + UI open dialog routing ✅
 
-### Faz 4: UI Polishing
-12. **Toolbar butonlarını enable et** — backend hazır olanları aç
-13. **Constraint ikonu** → ConstraintPanel'de MilCAD tarzı küçük Canvas ikonları
-14. **Feature editing** → ModelTree'de çift tıkla → parametreleri düzenle dialog
+### Faz 4: UI Polishing ✅ TAMAMLANDI
+13. ~~**Toolbar butonlarını enable et**~~ ✅
+14. ~~**Constraint ikonu**~~ → ConstraintPanel'de SVG ikonları ✅
+15. **Feature editing** → ModelTree çift tıkla → parametreleri düzenle (gelecek session)
 
 ---
 
