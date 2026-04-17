@@ -27,6 +27,7 @@ Rectangle {
                 CadToolButton { iconPath: "qrc:/resources/icons/part/extrude.svg"; tipText: "Pad"; accentColor: "#2563EB"; onClicked: actionRequested("pad") },
                 CadToolButton { iconPath: "qrc:/resources/icons/part/pocket.svg"; tipText: "Pocket"; accentColor: "#2563EB"; onClicked: actionRequested("pocket") },
                 CadToolButton { iconPath: "qrc:/resources/icons/part/revolve.svg"; tipText: "Revolve"; accentColor: "#2563EB"; onClicked: actionRequested("revolve") },
+                CadToolButton { iconPath: "qrc:/resources/icons/part/revolve.svg"; tipText: "Groove"; accentColor: "#9333EA"; onClicked: actionRequested("groove") },
                 CadToolButton { iconPath: "qrc:/resources/icons/part/swept.svg"; tipText: "Sweep"; accentColor: "#2563EB"; onClicked: actionRequested("sweep") },
                 CadToolButton { iconPath: "qrc:/resources/icons/part/loft.svg"; tipText: "Loft"; accentColor: "#2563EB"; onClicked: actionRequested("loft") },
                 CadToolButton { iconPath: "qrc:/resources/icons/part/hole.svg"; tipText: "Hole"; accentColor: "#2563EB"; onClicked: actionRequested("hole") },
@@ -50,6 +51,7 @@ Rectangle {
             title: "Patterns"; accentColor: "#0891B2"
             content: [
                 CadToolButton { iconPath: "qrc:/resources/icons/part/linear_pattern.svg"; tipText: "Linear Pattern"; accentColor: "#0891B2"; onClicked: actionRequested("linearPattern") },
+                CadToolButton { iconPath: "qrc:/resources/icons/part/linear_pattern.svg"; tipText: "Polar Pattern"; accentColor: "#0891B2"; onClicked: actionRequested("polarPattern") },
                 CadToolButton { iconPath: "qrc:/resources/icons/part/mirror_part.svg"; tipText: "Mirror"; accentColor: "#0891B2"; onClicked: actionRequested("mirror") }
             ]
         }

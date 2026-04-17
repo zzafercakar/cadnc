@@ -138,6 +138,27 @@ public:
     Q_INVOKABLE QString pad(const QString& sketchName, double length);
     Q_INVOKABLE QString pocket(const QString& sketchName, double depth);
     Q_INVOKABLE QString revolution(const QString& sketchName, double angleDeg);
+    Q_INVOKABLE QString groove(const QString& sketchName, double angleDeg);
+
+    // Boolean operations
+    Q_INVOKABLE QString booleanFuse(const QString& baseName, const QString& toolName);
+    Q_INVOKABLE QString booleanCut(const QString& baseName, const QString& toolName);
+    Q_INVOKABLE QString booleanCommon(const QString& baseName, const QString& toolName);
+
+    // Primitives
+    Q_INVOKABLE QString addBox(double length, double width, double height);
+    Q_INVOKABLE QString addCylinder(double radius, double height, double angle = 360.0);
+    Q_INVOKABLE QString addSphere(double radius);
+    Q_INVOKABLE QString addCone(double radius1, double radius2, double height);
+
+    // Dress-up (all edges)
+    Q_INVOKABLE QString filletAll(const QString& featureName, double radius);
+    Q_INVOKABLE QString chamferAll(const QString& featureName, double size);
+
+    // Patterns
+    Q_INVOKABLE QString linearPattern(const QString& featureName, double length, int occurrences);
+    Q_INVOKABLE QString polarPattern(const QString& featureName, double angleDeg, int occurrences);
+    Q_INVOKABLE QString mirrorFeature(const QString& featureName);
 
     // ── CAM ─────────────────────────────────────────────────────────
     Q_INVOKABLE void camSetStock(double length, double width, double height);

@@ -16,7 +16,7 @@ Popup {
     x: (mainWindow.width - width) / 2
     y: (mainWindow.height - height) / 2
 
-    property string featureType: "pad"  // "pad", "pocket", "revolve"
+    property string featureType: "pad"  // "pad", "pocket", "revolve", "groove"
 
     signal featureCreated(string featureName)
 
@@ -24,7 +24,8 @@ Popup {
     readonly property var config: {
         "pad":     { title: "Pad (Extrude)",   color: "#16A34A", icon: "\u2B06", label: "Length", unit: "mm", defaultVal: "10.0" },
         "pocket":  { title: "Pocket",          color: "#DC2626", icon: "\u2B07", label: "Depth",  unit: "mm", defaultVal: "5.0" },
-        "revolve": { title: "Revolution",      color: "#2563EB", icon: "\u21BB", label: "Angle",  unit: "\u00B0",  defaultVal: "360.0" }
+        "revolve": { title: "Revolution",      color: "#2563EB", icon: "\u21BB", label: "Angle",  unit: "\u00B0",  defaultVal: "360.0" },
+        "groove":  { title: "Groove",          color: "#9333EA", icon: "\u21BB", label: "Angle",  unit: "\u00B0",  defaultVal: "360.0" }
     }
     readonly property var cfg: config[featureType] || config["pad"]
 
@@ -170,6 +171,8 @@ Popup {
             result = cadEngine.pocket(sketchName, val)
         } else if (featureType === "revolve") {
             result = cadEngine.revolution(sketchName, val)
+        } else if (featureType === "groove") {
+            result = cadEngine.groove(sketchName, val)
         }
 
         if (result !== "") {

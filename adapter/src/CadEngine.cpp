@@ -602,6 +602,197 @@ QString CadEngine::revolution(const QString& sketchName, double angleDeg)
     return QString::fromStdString(result);
 }
 
+QString CadEngine::groove(const QString& sketchName, double angleDeg)
+{
+    if (!document_) return {};
+    if (activeSketch_) closeSketch();
+    auto part = document_->partDesign();
+    if (!part) return {};
+    std::string result = part->groove(sketchName.toStdString(), angleDeg);
+    if (!result.empty()) {
+        setStatus("Groove created: " + QString::fromStdString(result));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return QString::fromStdString(result);
+}
+
+QString CadEngine::booleanFuse(const QString& baseName, const QString& toolName)
+{
+    if (!document_) return {};
+    auto part = document_->partDesign();
+    if (!part) return {};
+    std::string result = part->booleanFuse(baseName.toStdString(), toolName.toStdString());
+    if (!result.empty()) {
+        setStatus("Boolean Fuse: " + QString::fromStdString(result));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return QString::fromStdString(result);
+}
+
+QString CadEngine::booleanCut(const QString& baseName, const QString& toolName)
+{
+    if (!document_) return {};
+    auto part = document_->partDesign();
+    if (!part) return {};
+    std::string result = part->booleanCut(baseName.toStdString(), toolName.toStdString());
+    if (!result.empty()) {
+        setStatus("Boolean Cut: " + QString::fromStdString(result));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return QString::fromStdString(result);
+}
+
+QString CadEngine::booleanCommon(const QString& baseName, const QString& toolName)
+{
+    if (!document_) return {};
+    auto part = document_->partDesign();
+    if (!part) return {};
+    std::string result = part->booleanCommon(baseName.toStdString(), toolName.toStdString());
+    if (!result.empty()) {
+        setStatus("Boolean Common: " + QString::fromStdString(result));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return QString::fromStdString(result);
+}
+
+QString CadEngine::addBox(double length, double width, double height)
+{
+    if (!document_) {
+        if (!newDocument("Untitled")) return {};
+    }
+    auto part = document_->partDesign();
+    if (!part) return {};
+    std::string result = part->addBox(length, width, height);
+    if (!result.empty()) {
+        setStatus(QString("Box: %1x%2x%3").arg(length).arg(width).arg(height));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return QString::fromStdString(result);
+}
+
+QString CadEngine::addCylinder(double radius, double height, double angle)
+{
+    if (!document_) {
+        if (!newDocument("Untitled")) return {};
+    }
+    auto part = document_->partDesign();
+    if (!part) return {};
+    std::string result = part->addCylinder(radius, height, angle);
+    if (!result.empty()) {
+        setStatus(QString("Cylinder: R%1 H%2").arg(radius).arg(height));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return QString::fromStdString(result);
+}
+
+QString CadEngine::addSphere(double radius)
+{
+    if (!document_) {
+        if (!newDocument("Untitled")) return {};
+    }
+    auto part = document_->partDesign();
+    if (!part) return {};
+    std::string result = part->addSphere(radius);
+    if (!result.empty()) {
+        setStatus(QString("Sphere: R%1").arg(radius));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return QString::fromStdString(result);
+}
+
+QString CadEngine::addCone(double radius1, double radius2, double height)
+{
+    if (!document_) {
+        if (!newDocument("Untitled")) return {};
+    }
+    auto part = document_->partDesign();
+    if (!part) return {};
+    std::string result = part->addCone(radius1, radius2, height);
+    if (!result.empty()) {
+        setStatus(QString("Cone: R1=%1 R2=%2 H=%3").arg(radius1).arg(radius2).arg(height));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return QString::fromStdString(result);
+}
+
+QString CadEngine::filletAll(const QString& featureName, double radius)
+{
+    if (!document_) return {};
+    auto part = document_->partDesign();
+    if (!part) return {};
+    std::string result = part->filletAll(featureName.toStdString(), radius);
+    if (!result.empty()) {
+        setStatus("3D Fillet: R" + QString::number(radius));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return QString::fromStdString(result);
+}
+
+QString CadEngine::chamferAll(const QString& featureName, double size)
+{
+    if (!document_) return {};
+    auto part = document_->partDesign();
+    if (!part) return {};
+    std::string result = part->chamferAll(featureName.toStdString(), size);
+    if (!result.empty()) {
+        setStatus("3D Chamfer: " + QString::number(size));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return QString::fromStdString(result);
+}
+
+QString CadEngine::linearPattern(const QString& featureName, double length, int occurrences)
+{
+    if (!document_) return {};
+    auto part = document_->partDesign();
+    if (!part) return {};
+    std::string result = part->linearPattern(featureName.toStdString(), 0, 0, 1, length, occurrences);
+    if (!result.empty()) {
+        setStatus(QString("Linear Pattern: %1x").arg(occurrences));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return QString::fromStdString(result);
+}
+
+QString CadEngine::polarPattern(const QString& featureName, double angleDeg, int occurrences)
+{
+    if (!document_) return {};
+    auto part = document_->partDesign();
+    if (!part) return {};
+    std::string result = part->polarPattern(featureName.toStdString(), 0, 0, 1, angleDeg, occurrences);
+    if (!result.empty()) {
+        setStatus(QString("Polar Pattern: %1x @ %2°").arg(occurrences).arg(angleDeg));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return QString::fromStdString(result);
+}
+
+QString CadEngine::mirrorFeature(const QString& featureName)
+{
+    if (!document_) return {};
+    auto part = document_->partDesign();
+    if (!part) return {};
+    std::string result = part->mirror(featureName.toStdString(), 1, 0, 0);
+    if (!result.empty()) {
+        setStatus("Mirror: " + QString::fromStdString(result));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return QString::fromStdString(result);
+}
+
 // ── CAM ────────────────────────────────────────────────────────────
 
 void CadEngine::camSetStock(double length, double width, double height)
@@ -900,6 +1091,19 @@ void CadEngine::updateViewportShapes()
         bool isSolid = it->typeName.find("Pad") != std::string::npos
                     || it->typeName.find("Pocket") != std::string::npos
                     || it->typeName.find("Revolution") != std::string::npos
+                    || it->typeName.find("Groove") != std::string::npos
+                    || it->typeName.find("Fuse") != std::string::npos
+                    || it->typeName.find("Cut") != std::string::npos
+                    || it->typeName.find("Common") != std::string::npos
+                    || it->typeName.find("Box") != std::string::npos
+                    || it->typeName.find("Cylinder") != std::string::npos
+                    || it->typeName.find("Sphere") != std::string::npos
+                    || it->typeName.find("Cone") != std::string::npos
+                    || it->typeName.find("Fillet") != std::string::npos
+                    || it->typeName.find("Chamfer") != std::string::npos
+                    || it->typeName.find("LinearPattern") != std::string::npos
+                    || it->typeName.find("PolarPattern") != std::string::npos
+                    || it->typeName.find("Mirrored") != std::string::npos
                     || it->typeName.find("Body") != std::string::npos;
         if (isSolid) { tipName = it->name; break; }
     }
@@ -915,7 +1119,20 @@ void CadEngine::updateViewportShapes()
         // overlapping semi-transparent shapes
         bool isSolid = f.typeName.find("Pad") != std::string::npos
                     || f.typeName.find("Pocket") != std::string::npos
-                    || f.typeName.find("Revolution") != std::string::npos;
+                    || f.typeName.find("Revolution") != std::string::npos
+                    || f.typeName.find("Groove") != std::string::npos
+                    || f.typeName.find("Fuse") != std::string::npos
+                    || f.typeName.find("Cut") != std::string::npos
+                    || f.typeName.find("Common") != std::string::npos
+                    || f.typeName.find("Box") != std::string::npos
+                    || f.typeName.find("Cylinder") != std::string::npos
+                    || f.typeName.find("Sphere") != std::string::npos
+                    || f.typeName.find("Cone") != std::string::npos
+                    || f.typeName.find("Fillet") != std::string::npos
+                    || f.typeName.find("Chamfer") != std::string::npos
+                    || f.typeName.find("LinearPattern") != std::string::npos
+                    || f.typeName.find("PolarPattern") != std::string::npos
+                    || f.typeName.find("Mirrored") != std::string::npos;
         if (isSolid && f.name != tipName) continue;
 
         void* featurePtr = document_->getFeatureShape(f.name);
@@ -937,6 +1154,21 @@ void CadEngine::updateViewportShapes()
             color = Quantity_Color(0.85, 0.4, 0.35, Quantity_TOC_sRGB);   // red
         else if (f.typeName.find("Revolution") != std::string::npos)
             color = Quantity_Color(0.35, 0.55, 0.9, Quantity_TOC_sRGB);   // blue
+        else if (f.typeName.find("Groove") != std::string::npos)
+            color = Quantity_Color(0.7, 0.4, 0.35, Quantity_TOC_sRGB);   // dark red
+        else if (f.typeName.find("Box") != std::string::npos
+              || f.typeName.find("Cylinder") != std::string::npos
+              || f.typeName.find("Sphere") != std::string::npos
+              || f.typeName.find("Cone") != std::string::npos)
+            color = Quantity_Color(0.6, 0.7, 0.8, Quantity_TOC_sRGB);   // light steel
+        else if (f.typeName.find("Fillet") != std::string::npos
+              || f.typeName.find("Chamfer") != std::string::npos)
+            color = Quantity_Color(0.5, 0.8, 0.6, Quantity_TOC_sRGB);   // mint
+        else if (f.typeName.find("Fuse") != std::string::npos)
+            color = Quantity_Color(0.45, 0.7, 0.85, Quantity_TOC_sRGB); // cyan
+        else if (f.typeName.find("Cut") != std::string::npos
+              || f.typeName.find("Common") != std::string::npos)
+            color = Quantity_Color(0.85, 0.55, 0.4, Quantity_TOC_sRGB); // orange
 
         // Sketches shown as wireframe, solids as shaded
         viewport_->displayShape(f.name, shape, color, isSketch);

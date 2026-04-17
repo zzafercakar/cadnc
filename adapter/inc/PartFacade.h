@@ -43,6 +43,24 @@ public:
     std::string mirror(const std::string& featureName,
                        double planeNormX, double planeNormY, double planeNormZ);
 
+    // ── Groove (subtractive revolution) ────────────────────────────
+    std::string groove(const std::string& sketchName, double angleDeg);
+
+    // ── Boolean operations ─────────────────────────────────────────
+    std::string booleanFuse(const std::string& baseName, const std::string& toolName);
+    std::string booleanCut(const std::string& baseName, const std::string& toolName);
+    std::string booleanCommon(const std::string& baseName, const std::string& toolName);
+
+    // ── Primitives (Part module) ───────────────────────────────────
+    std::string addBox(double length, double width, double height);
+    std::string addCylinder(double radius, double height, double angle = 360.0);
+    std::string addSphere(double radius);
+    std::string addCone(double radius1, double radius2, double height);
+
+    // ── Dress-up (all edges) ──────────────────────────────────────
+    std::string filletAll(const std::string& featureName, double radius);
+    std::string chamferAll(const std::string& featureName, double size);
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

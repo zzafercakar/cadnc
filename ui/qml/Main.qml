@@ -346,6 +346,35 @@ ApplicationWindow {
                     pocketDialog.open()
                 } else if (action === "revolve") {
                     revolveDialog.open()
+                } else if (action === "groove") {
+                    grooveDialog.open()
+                } else if (action === "box") {
+                    boxDialog.primitiveType = "box"; boxDialog.open()
+                } else if (action === "cylinder") {
+                    boxDialog.primitiveType = "cylinder"; boxDialog.open()
+                } else if (action === "sphere") {
+                    boxDialog.primitiveType = "sphere"; boxDialog.open()
+                } else if (action === "cone") {
+                    boxDialog.primitiveType = "cone"; boxDialog.open()
+                } else if (action === "union") {
+                    boolDialog.booleanType = "fuse"; boolDialog.open()
+                } else if (action === "cut") {
+                    boolDialog.booleanType = "cut"; boolDialog.open()
+                } else if (action === "intersect") {
+                    boolDialog.booleanType = "common"; boolDialog.open()
+                } else if (action === "fillet3d") {
+                    dressUpDialog.dressUpType = "fillet"; dressUpDialog.open()
+                } else if (action === "chamfer3d") {
+                    dressUpDialog.dressUpType = "chamfer"; dressUpDialog.open()
+                } else if (action === "linearPattern") {
+                    var tree = cadEngine.featureTree
+                    if (tree.length > 0) cadEngine.linearPattern(tree[tree.length-1].name, 100, 3)
+                } else if (action === "polarPattern") {
+                    var tree2 = cadEngine.featureTree
+                    if (tree2.length > 0) cadEngine.polarPattern(tree2[tree2.length-1].name, 360, 6)
+                } else if (action === "mirror") {
+                    var tree3 = cadEngine.featureTree
+                    if (tree3.length > 0) cadEngine.mirrorFeature(tree3[tree3.length-1].name)
                 } else {
                     mainWindow.currentStatus = action
                 }
@@ -601,6 +630,22 @@ ApplicationWindow {
     FeatureDialog {
         id: revolveDialog; featureType: "revolve"
         onFeatureCreated: function(name) { mainWindow.currentStatus = "Revolution created: " + name }
+    }
+    FeatureDialog {
+        id: grooveDialog; featureType: "groove"
+        onFeatureCreated: function(name) { mainWindow.currentStatus = "Groove created: " + name }
+    }
+    PrimitiveDialog {
+        id: boxDialog; primitiveType: "box"
+        onFeatureCreated: function(name) { mainWindow.currentStatus = "Primitive created: " + name }
+    }
+    BooleanDialog {
+        id: boolDialog; booleanType: "fuse"
+        onFeatureCreated: function(name) { mainWindow.currentStatus = "Boolean: " + name }
+    }
+    DressUpDialog {
+        id: dressUpDialog; dressUpType: "fillet"
+        onFeatureCreated: function(name) { mainWindow.currentStatus = "Dress-up: " + name }
     }
 
     // ─── File Dialogs ──────────────────────────────────────────────
