@@ -83,6 +83,15 @@ public:
     /// Queue a grid visibility change (ActivateGrid / DeactivateGrid).
     void queueGridVisible(bool on);
 
+    /// When on, the next viewport left-click is a face pick: the render
+    /// thread resolves the selected (feature, subName) pair and the UI
+    /// thread drains it in synchronize().
+    void setFacePickMode(bool on) { facePickMode_.store(on, std::memory_order_relaxed); }
+    bool facePickMode() const { return facePickMode_.load(std::memory_order_relaxed); }
+    /// Drain any face picks produced since the last synchronize(). Called on
+    /// UI thread so the caller can emit Qt signals safely.
+    std::vector<std::pair<std::string,std::string>> drainPickedFaces();
+
     // ── Accessors ──────────────────────────────────────────────────
     Handle(V3d_View) view() const { return view_; }
     Handle(AIS_InteractiveContext) context() const { return context_; }
@@ -134,6 +143,18 @@ private:
 
     // Deferred grid-visibility change. 0 = no pending, 1 = show, -1 = hide.
     std::atomic<int> pendingGridVisible_{0};
+
+    // Face-pick workflow. UI thread sets facePickMode_ via setFacePickMode();
+    // render thread resolves picks into pickedFaces_ after SelectDetected();
+    // UI thread drains them in synchronize() to emit a Qt signal.
+    std::atomic<bool> facePickMode_{false};
+    std::mutex pickMutex_;
+    std::vector<std::pair<std::string,std::string>> pickedFaces_;
+
+    // Helper — resolve the currently-selected AIS_Shape + face into
+    // (featureName, "FaceN"). Pushes onto pickedFaces_ if the selection is a
+    // Face whose parent AIS is in shapes_.
+    void tryResolveFacePick();
 };
 
 } // namespace CADNC

@@ -4,6 +4,7 @@
 
 #include <cctype>
 #include <cstdio>
+#include <unordered_map>
 #include <App/Application.h>
 #include <App/Document.h>
 #include <App/DocumentObject.h>
@@ -11,6 +12,7 @@
 #include <App/GroupExtension.h>
 #include <App/OriginGroupExtension.h>
 #include <App/PropertyGeo.h>
+#include <App/PropertyLinks.h>
 #include <Base/Console.h>
 #include <Base/Placement.h>
 #include <Base/Rotation.h>
@@ -323,7 +325,46 @@ std::vector<FeatureInfo> CadDocument::featureTree() const
     std::vector<FeatureInfo> tree;
     if (!impl_->doc) return tree;
 
-    for (auto* obj : impl_->doc->getObjects()) {
+    const auto& objs = impl_->doc->getObjects();
+
+    // First pass — figure out which Pad/Pocket/Revolution/Groove (if any)
+    // consumes each sketch as its Profile. FreeCAD and SolidWorks nest the
+    // sketch under the feature that uses it, rather than showing them as
+    // siblings under Body. We reuse DocumentObject::getInList() so the
+    // relationship tracks every property type (PropertyLink, LinkSub, …)
+    // that FreeCAD stores the Profile in.
+    std::unordered_map<std::string, std::string> sketchConsumer;
+    for (auto* obj : objs) {
+        const char* tn = obj->getTypeId().getName();
+        if (!tn) continue;
+        std::string t(tn);
+        bool consumer = t.find("Pad") != std::string::npos
+                     || t.find("Pocket") != std::string::npos
+                     || t.find("Revolution") != std::string::npos
+                     || t.find("Groove") != std::string::npos;
+        if (!consumer) continue;
+
+        // Pull the Profile link out of any PartDesign sketch-based feature.
+        auto* prof = obj->getPropertyByName("Profile");
+        if (!prof) continue;
+        // PropertyLink / PropertyLinkSub both derive from PropertyLinkBase,
+        // which exposes getValues(). We ask generically — avoids pulling in
+        // extra PartDesign headers for a cast.
+        std::vector<App::DocumentObject*> links;
+        auto* asBase = dynamic_cast<App::PropertyLinkBase*>(prof);
+        if (asBase) asBase->getLinks(links);
+        for (auto* l : links) {
+            if (!l) continue;
+            auto* sk = dynamic_cast<Sketcher::SketchObject*>(l);
+            if (!sk) continue;
+            // First writer wins — usually there is only one feature per sketch
+            // anyway; this just keeps the tree deterministic if not.
+            sketchConsumer.emplace(sk->getNameInDocument(),
+                                   obj->getNameInDocument());
+        }
+    }
+
+    for (auto* obj : objs) {
         FeatureInfo info;
         info.name = obj->getNameInDocument();
         info.label = obj->Label.getValue();
@@ -334,6 +375,17 @@ std::vector<FeatureInfo> CadDocument::featureTree() const
         // the object is at the document top level.
         if (auto* parent = App::GroupExtension::getGroupOfObject(obj)) {
             info.parent = parent->getNameInDocument();
+        }
+
+        // Sketch nesting: if this is a sketch consumed by a PartDesign
+        // feature, reparent it under that feature — matches FreeCAD /
+        // SolidWorks tree layout. The GroupExtension-derived Body parent
+        // is overridden on purpose; the consumer feature is itself a
+        // child of Body so the sketch ends up at Body > Pad > Sketch.
+        if (info.typeName.find("Sketcher::SketchObject") != std::string::npos) {
+            auto it = sketchConsumer.find(info.name);
+            if (it != sketchConsumer.end())
+                info.parent = it->second;
         }
 
         tree.push_back(std::move(info));
@@ -373,6 +425,28 @@ bool CadDocument::renameFeature(const std::string& name, const std::string& newL
 
     obj->Label.setValue(newLabel);
     return true;
+}
+
+std::string CadDocument::duplicateFeature(const std::string& name)
+{
+    if (!impl_->doc) return {};
+    auto* src = impl_->doc->getObject(name.c_str());
+    if (!src) return {};
+
+    // FreeCAD's copyObject deep-clones the object and its link dependencies,
+    // registering the clones in the target document. Pass the source doc as
+    // target so the copy lands alongside the original.
+    std::vector<App::DocumentObject*> srcs{src};
+    auto copies = impl_->doc->copyObject(srcs, /*recursive=*/true);
+    if (copies.empty()) return {};
+
+    auto* dup = copies.front();
+    // Mirror the Label so the tree shows "Pad (copy)" rather than the raw
+    // internal name — users navigate by label, not by internal id.
+    std::string baseLabel = src->Label.getValue();
+    dup->Label.setValue((baseLabel + " (copy)").c_str());
+    impl_->doc->recompute();
+    return dup->getNameInDocument();
 }
 
 bool CadDocument::toggleVisibility(const std::string& name)

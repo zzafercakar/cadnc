@@ -62,6 +62,9 @@ public:
     int featureCount() const;
     bool deleteFeature(const std::string& name);
     bool renameFeature(const std::string& name, const std::string& newLabel);
+    /// Deep-clone a feature (copyObject) and return the new internal name.
+    /// Empty string on failure.
+    std::string duplicateFeature(const std::string& name);
 
     /// Toggle the feature's `Visibility` property (FreeCAD PropertyBool).
     /// Returns the new state, or false for unknown names. The viewport

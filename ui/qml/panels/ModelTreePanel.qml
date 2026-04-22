@@ -60,12 +60,47 @@ Rectangle {
             return typeName.indexOf("Body") >= 0 || typeName.indexOf("Origin") >= 0
         }
 
+        // A feature is "structural" if it ships with the Body automatically
+        // (Origin container, X/Y/Z axes, XY/XZ/YZ base planes, Origin-Point).
+        // We insert a visual divider between the last structural row and the
+        // first user-authored feature so the tree visually separates
+        // "defaults" from "your work" (Solidworks/FreeCAD pattern).
+        function isStructural(item) {
+            var t = item.typeName || ""
+            if (t === "App::Origin") return true
+            if (t === "App::Line" || t === "App::Plane" || t === "App::Point") return true
+            return false
+        }
+
         var result = []
+        var sawStructural = false
+        var insertedDivider = false
         function walk(parentName, depth) {
             var children = byParent[parentName] || []
             for (var j = 0; j < children.length; j++) {
                 var item = children[j]
                 var hasKids = (byParent[item.name] || []).length > 0
+                var struct = isStructural(item)
+
+                // Depth 1 is immediate children of Body — that's where user
+                // features (Sketch, Pad, DatumPlane) sit. Insert the divider
+                // the moment we transition from structural → user at depth 1.
+                if (depth === 1 && sawStructural && !struct && !insertedDivider) {
+                    result.push({
+                        name: "__divider__",
+                        label: "",
+                        typeName: "__Divider__",
+                        parent: parentName,
+                        depth: depth,
+                        hasChildren: false,
+                        isExpanded: false,
+                        isContainer: false,
+                        isDivider: true
+                    })
+                    insertedDivider = true
+                }
+                if (depth === 1 && struct) sawStructural = true
+
                 result.push({
                     name: item.name,
                     label: item.label,
@@ -74,7 +109,8 @@ Rectangle {
                     depth: depth,
                     hasChildren: hasKids,
                     isExpanded: panel.expanded[item.name] !== false,  // default true
-                    isContainer: isContainer(item.typeName)
+                    isContainer: isContainer(item.typeName),
+                    isDivider: false
                 })
                 if (hasKids && panel.expanded[item.name] !== false) {
                     walk(item.name, depth + 1)
@@ -279,11 +315,45 @@ Rectangle {
             delegate: Rectangle {
                 id: delegate
                 width: treeView.width
-                height: 30
+                height: modelData.isDivider ? 12 : 30
                 color: {
+                    if (modelData.isDivider) return "transparent"
                     if (panel.selectedIndex === index) return Theme.selected
                     if (mouseArea.containsMouse) return Theme.hover
                     return "transparent"
+                }
+
+                // Divider row: a thin horizontal rule with a small "Features"
+                // caption so the user can tell the automatic defaults above
+                // apart from their own work below.
+                Rectangle {
+                    visible: modelData.isDivider
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: 24
+                    anchors.rightMargin: 12
+                    height: 1
+                    color: Theme.border
+                }
+                Rectangle {
+                    visible: modelData.isDivider
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left
+                    anchors.leftMargin: 26
+                    color: Theme.panel
+                    width: featText.implicitWidth + 10
+                    height: 12
+                    radius: 2
+                    Text {
+                        id: featText
+                        anchors.centerIn: parent
+                        text: qsTr("Features")
+                        font.pixelSize: 9
+                        font.letterSpacing: 0.5
+                        font.bold: true
+                        color: Theme.textSec
+                    }
                 }
 
                 property bool isSelected: panel.selectedIndex === index
@@ -297,6 +367,7 @@ Rectangle {
                 property int indentPx: 12 + modelData.depth * 14
 
                 RowLayout {
+                    visible: !modelData.isDivider
                     anchors.fill: parent
                     anchors.leftMargin: delegate.indentPx
                     anchors.rightMargin: 8
@@ -399,7 +470,13 @@ Rectangle {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: bodyQuickMenu.popup()
+                            onClicked: {
+                                // Menu.popup() with no parent anchors to the
+                                // window at (0,0) on some Qt versions. Pin it
+                                // just below the + button so the user sees it
+                                // exactly where they clicked.
+                                bodyQuickMenu.popup(plusArea, 0, plusArea.height)
+                            }
                         }
                         ToolTip.text: "Quick actions"
                         ToolTip.visible: plusArea.containsMouse
@@ -425,6 +502,7 @@ Rectangle {
                     id: mouseArea
                     anchors.fill: parent
                     hoverEnabled: true
+                    enabled: !modelData.isDivider
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
 
                     onClicked: function(mouse) {

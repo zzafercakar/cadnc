@@ -57,6 +57,14 @@ bool CadEngine::init(int argc, char** argv)
 void CadEngine::setViewport(OccViewport* viewport)
 {
     viewport_ = viewport;
+    if (viewport_) {
+        // Bridge viewport face-pick signal to the Q_PROPERTY-facing one that
+        // QML Connections consume.
+        QObject::connect(viewport_, &OccViewport::facePicked, this,
+                         [this](const QString& feat, const QString& sub) {
+                             reportFacePicked(feat, sub);
+                         });
+    }
 }
 
 // ── Document ────────────────────────────────────────────────────────
@@ -219,6 +227,21 @@ bool CadEngine::deleteFeature(const QString& name)
     return ok;
 }
 
+QString CadEngine::duplicateFeature(const QString& name)
+{
+    if (!document_) return QString();
+    TxScope tx(this, "Duplicate Feature");
+    std::string newName = document_->duplicateFeature(name.toStdString());
+    if (newName.empty()) {
+        setStatus("Duplicate failed: " + name);
+        return QString();
+    }
+    setStatus("Duplicated: " + name);
+    Q_EMIT featureTreeChanged();
+    updateViewportShapes();
+    return QString::fromStdString(newName);
+}
+
 bool CadEngine::renameFeature(const QString& name, const QString& newLabel)
 {
     if (!document_) return false;
@@ -293,9 +316,11 @@ bool CadEngine::createSketch(const QString& name, int planeType)
         sketchPlanes_[activeSketchName_] = planeType;
         setStatus(QString("Sketch created: %1 (%2 plane)").arg(name, pn));
 
-        // Clear 3D shapes during sketch editing — the QML SketchCanvas renders
-        // 2D geometry as an overlay; showing the 3D solid underneath is confusing
-        if (viewport_) viewport_->clearShapes();
+        // Keep the existing body shapes visible while sketching — SolidWorks /
+        // FreeCAD behaviour. The SketchCanvas is a transparent overlay on top
+        // of OccViewport, so the user still sees their solid as reference when
+        // starting a new sketch on a datum plane or base plane.
+        updateViewportShapes();
 
         // Orient viewport camera to face the sketch plane
         if (viewport_) {
@@ -333,9 +358,9 @@ bool CadEngine::createSketchOnFace(const QString& name,
     // so the re-open path falls back to Placement detection.
     setStatus(QString("Sketch on %1/%2").arg(featureName, subElement));
 
-    // Same viewport cleanup as createSketch — hide 3D shapes while the 2D
-    // overlay is active.
-    if (viewport_) viewport_->clearShapes();
+    // Keep the body visible — essential when sketching on a face of the
+    // existing solid so the user can see what surface they're working on.
+    updateViewportShapes();
 
     Q_EMIT featureTreeChanged();
     Q_EMIT sketchChanged();
@@ -439,8 +464,9 @@ bool CadEngine::createSketchOnPlane(const QString& name, const QString& planeFea
     activeSketchName_ = name.toStdString();
     setStatus(QString("Sketch on %1").arg(planeFeatureName));
 
-    // Mirror the base-plane flow: clear 3D shapes while editing 2D.
-    if (viewport_) viewport_->clearShapes();
+    // Mirror the base-plane flow: keep the body visible as reference so the
+    // user can see which face/position the sketch sits on.
+    updateViewportShapes();
 
     Q_EMIT featureTreeChanged();
     Q_EMIT sketchChanged();
@@ -478,8 +504,9 @@ bool CadEngine::openSketch(const QString& name)
         activeSketchName_ = name.toStdString();
         setStatus("Editing sketch: " + name);
 
-        // Clear 3D shapes during sketch editing
-        if (viewport_) viewport_->clearShapes();
+        // Keep existing body visible as reference while editing — user can
+        // see the solid they're modifying (same behaviour as createSketch).
+        updateViewportShapes();
 
         // Orient camera to face the sketch plane (UX-004).
         // Prefer the in-memory map (createSketch records it); fall back to
@@ -1563,6 +1590,26 @@ void CadEngine::setGridVisible(bool on)
     gridVisible_ = on;
     if (viewport_) viewport_->setGridVisible(on);
     Q_EMIT gridVisibleChanged();
+}
+
+void CadEngine::setFacePickMode(bool on)
+{
+    if (facePickMode_ == on) return;
+    facePickMode_ = on;
+    // Tell the render thread to resolve the next selection as a face pick.
+    if (viewport_) viewport_->setFacePickMode(on);
+    Q_EMIT facePickModeChanged();
+}
+
+void CadEngine::reportFacePicked(const QString& featureName, const QString& subName)
+{
+    // One-shot: drop the mode so the next click behaves normally again. The
+    // panel flips it back on if it wants to pick another face.
+    if (facePickMode_) {
+        facePickMode_ = false;
+        Q_EMIT facePickModeChanged();
+    }
+    Q_EMIT facePicked(featureName, subName);
 }
 
 QStringList CadEngine::sketchNames() const

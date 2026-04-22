@@ -27,6 +27,10 @@ ApplicationWindow {
     // When non-empty, the left panel becomes a SolidWorks-style FeatureEditPanel
     // ("pad" | "pocket" | "revolve" | "groove"). Live-previews the feature.
     property string featureEditMode: ""
+    // When true, the left panel swaps to the DatumPlanePanel task editor.
+    // Docked instead of a floating Popup so a viewport click (for face pick)
+    // doesn't dismiss it.
+    property bool datumPlaneEditMode: false
 
     readonly property var workbenchNames:  [qsTr("Part"), qsTr("Sketch"), qsTr("CAM"), qsTr("Nesting")]
     readonly property var workbenchColors: [Theme.wbPart, Theme.wbSketch, Theme.wbCam, Theme.wbNesting]
@@ -174,7 +178,16 @@ ApplicationWindow {
                 spacing: 4
 
                 QAButton { iconName: "new";  tip: qsTr("New (Ctrl+N)");  onClicked: requestNew() }
-                QAButton { iconName: "save"; tip: qsTr("Save (Ctrl+S)"); onClicked: saveDialog.open() }
+                QAButton { iconName: "save"; tip: qsTr("Save (Ctrl+S)");
+                           onClicked: {
+                               if (!cadEngine.hasDocument) return
+                               // Mirror the Ctrl+S action: overwrite the backing
+                               // file silently if we have one, otherwise prompt.
+                               if (cadEngine.documentPath !== "")
+                                   cadEngine.saveDocument()
+                               else
+                                   saveDialog.open()
+                           } }
                 QASep {}
                 // Always-available "New Sketch" button — user asked for
                 // a permanent entry point in the top toolbar in addition
@@ -506,7 +519,9 @@ ApplicationWindow {
 
             ModelTreePanel {
                 anchors.fill: parent
-                visible: mainWindow.featureEditMode === "" && featureEditPanel.editingFeatureName === ""
+                visible: mainWindow.featureEditMode === ""
+                       && featureEditPanel.editingFeatureName === ""
+                       && !mainWindow.datumPlaneEditMode
                 onSketchDoubleClicked: function(name) { cadEngine.openSketch(name); mainWindow.currentWorkbench = 1 }
                 onFeatureEditRequested: function(name, typeName) {
                     // Map PartDesign type → FeatureEditPanel featureType key.
@@ -529,8 +544,13 @@ ApplicationWindow {
                 }
                 // Header button + context menu "New Sketch"
                 onNewSketchRequested: sketchPlaneDialog.open()
-                // Right-click → "Add Datum Plane…" — opens the dialog
-                onNewDatumPlaneRequested: datumPlaneDialog.open()
+                // Right-click → "Add Datum Plane…" — swap the tree for the
+                // DatumPlanePanel task editor. Previously opened the modal
+                // Popup which closed on any viewport click.
+                onNewDatumPlaneRequested: {
+                    mainWindow.datumPlaneEditMode = true
+                    datumPlanePanel.open()
+                }
             }
 
             FeatureEditPanel {
@@ -541,6 +561,14 @@ ApplicationWindow {
                 visible: mainWindow.featureEditMode !== "" || featureEditPanel.editingFeatureName !== ""
                 onAccepted: { mainWindow.featureEditMode = "" }
                 onCancelled: { mainWindow.featureEditMode = "" }
+            }
+
+            DatumPlanePanel {
+                id: datumPlanePanel
+                anchors.fill: parent
+                visible: mainWindow.datumPlaneEditMode
+                onAccepted:  { mainWindow.datumPlaneEditMode = false }
+                onCancelled: { mainWindow.datumPlaneEditMode = false }
             }
 
             // Open the panel in create mode whenever featureEditMode becomes
@@ -733,6 +761,16 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     visible: !cadEngine.sketchActive
+                    onFeatureEditRequested: function(name, typeName) {
+                        // Same routing the ModelTreePanel uses — map to the
+                        // FeatureEditPanel key and pop the inline editor.
+                        var key = typeName.indexOf("Pad") >= 0      ? "pad"
+                                : typeName.indexOf("Pocket") >= 0   ? "pocket"
+                                : typeName.indexOf("Revolution") >= 0 ? "revolve"
+                                : typeName.indexOf("Groove") >= 0   ? "groove"
+                                : ""
+                        if (key !== "") featureEditPanel.openForEdit(key, name)
+                    }
                 }
             }
         }
@@ -820,29 +858,28 @@ ApplicationWindow {
     FileDialog {
         id: saveDialog
         title: "Save As"
+        // Keep native project as the ONLY primary save target. Geometry-only
+        // formats (STEP, IGES, STL, DXF, OBJ) are available from File →
+        // Export instead, which routes to `exportDialog` and then to
+        // `cadEngine.exportDocument`. Mixing them in Save confused users who
+        // expected "Save" to preserve the parametric model.
         nameFilters: [
             "CADNC project (*.cadnc *.FCStd)",
-            "STEP (*.step *.stp)",
-            "IGES (*.iges *.igs *.igus)",
-            "BREP (*.brep)",
-            "STL (*.stl)",
-            "DXF (*.dxf)",
-            "OBJ (*.obj)",
             "All files (*)"
         ]
         fileMode: FileDialog.SaveFile
+        defaultSuffix: "cadnc"
         onAccepted: {
             var path = selectedFile.toString().replace("file://", "")
             var ext = path.split(".").pop().toLowerCase()
-            // Native vs geometry-only export routes. If the user typed a
-            // name without an extension, default to .cadnc.
-            if (ext === path.toLowerCase()) {
+            // Treat any name with no recognised extension as native — the
+            // FileDialog's defaultSuffix also adds .cadnc when the user
+            // leaves the box empty.
+            if (ext !== "cadnc" && ext !== "fcstd") {
                 path += ".cadnc"; ext = "cadnc"
             }
-            var ok = (ext === "fcstd" || ext === "cadnc")
-                   ? cadEngine.saveDocumentAs(path)
-                   : cadEngine.exportDocument(path)
-            if (ok) mainWindow.title = "CADNC v" + appVersion + " — " + path.split("/").pop()
+            if (cadEngine.saveDocumentAs(path))
+                mainWindow.title = "CADNC v" + appVersion + " — " + path.split("/").pop()
         }
     }
 
@@ -851,17 +888,42 @@ ApplicationWindow {
         title: "Export"
         nameFilters: [
             "STEP (*.step *.stp)",
-            "IGES (*.iges *.igs *.igus)",
+            "IGES (*.iges *.igs)",
             "STL (*.stl)",
             "BREP (*.brep)",
             "DXF (*.dxf)",
             "OBJ (*.obj)",
             "All files (*)"
         ]
+        // FileDialog's own defaultSuffix would only fire when the filename has
+        // NO extension at all; users who type "part" with filter "IGES" get
+        // "part.iges" via this handler, and users who type "part.garbage"
+        // with filter "IGES" get their garbage ext kept (explicit override).
         fileMode: FileDialog.SaveFile
+        defaultSuffix: "step"
         onAccepted: {
             var path = selectedFile.toString().replace("file://", "")
-            cadEngine.exportDocument(path)
+            var knownExts = ["step", "stp", "iges", "igs", "stl", "brep",
+                             "brp", "dxf", "dwg", "obj", "ply"]
+            var lastDot = path.lastIndexOf(".")
+            var ext = lastDot >= 0 ? path.substring(lastDot + 1).toLowerCase() : ""
+            // If the user left it extensionless OR picked something
+            // unrecognised, force it to match the active filter so the file
+            // round-trips through Open without surprise.
+            if (knownExts.indexOf(ext) < 0) {
+                var filterExt = "step"
+                var f = selectedNameFilter.name || ""
+                if (f.indexOf("IGES") >= 0) filterExt = "iges"
+                else if (f.indexOf("STL")  >= 0) filterExt = "stl"
+                else if (f.indexOf("BREP") >= 0) filterExt = "brep"
+                else if (f.indexOf("DXF")  >= 0) filterExt = "dxf"
+                else if (f.indexOf("OBJ")  >= 0) filterExt = "obj"
+                path = (lastDot >= 0 ? path.substring(0, lastDot) : path) + "." + filterExt
+            }
+            if (cadEngine.exportDocument(path))
+                mainWindow.currentStatus = "Exported: " + path
+            else
+                mainWindow.currentStatus = "Export failed"
         }
     }
 
@@ -1183,14 +1245,14 @@ ApplicationWindow {
         }
     }
 
-    // ─── Datum Plane dialog ────────────────────────────────────────
-    // Two modes: (a) base plane + offset + optional tilt,
-    //            (b) face of an existing solid + offset.
-    // Switched via tab-style radio. Every input triggers the parametric
-    // setValue so the preview happens live — closing Apply just stops
-    // further edits.
+    // ─── Datum Plane dialog (REMOVED — replaced by DatumPlanePanel) ──
+    // The old Popup dismissed on any viewport click which made face-picking
+    // impossible. The task editor now lives in the left column; see
+    // DatumPlanePanel.qml and the `datumPlaneEditMode` flag.
     Popup {
         id: datumPlaneDialog
+        visible: false
+        enabled: false    // kept only as a placeholder; never shown
         modal: true; focus: true; padding: 0
         width: 360; height: dpCol.implicitHeight + 24
         x: (mainWindow.width - width) / 2; y: (mainWindow.height - height) / 2

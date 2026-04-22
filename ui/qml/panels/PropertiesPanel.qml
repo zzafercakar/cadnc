@@ -14,6 +14,10 @@ Rectangle {
 
     property int selectedFeatureIndex: -1
 
+    // Forwarded to Main.qml so the FeatureEditPanel can open in the left
+    // column. Same contract as ModelTreePanel's featureEditRequested signal.
+    signal featureEditRequested(string name, string typeName)
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 0
@@ -77,7 +81,11 @@ Rectangle {
                     PropertyRow { label: "Features"; value: cadEngine.featureTree.length.toString() }
                 }
 
-                // ── Feature List (compact) ──────────────────────────
+                // ── Feature List (compact with actions) ─────────────
+                // Each row is a feature card with hover-revealed action
+                // buttons (Edit / Rename / Duplicate / Delete). Keeps the
+                // common "select then right-click" detour out of the flow —
+                // FreeCAD and SolidWorks expose the same actions inline.
                 PropertySection {
                     title: "Feature Parameters"
                     visible: cadEngine.featureTree.length > 0 && !cadEngine.sketchActive
@@ -85,49 +93,109 @@ Rectangle {
                     Repeater {
                         model: cadEngine.featureTree
                         delegate: Rectangle {
+                            id: featRow
                             width: contentCol.width
-                            height: featureCol.implicitHeight + 12
+                            height: 34
                             color: featureArea.containsMouse ? Theme.hover : "transparent"
 
-                            ColumnLayout {
-                                id: featureCol
-                                anchors.left: parent.left; anchors.right: parent.right
-                                anchors.leftMargin: 12; anchors.rightMargin: 8
-                                anchors.verticalCenter: parent.verticalCenter
-                                spacing: 2
-
-                                RowLayout {
-                                    spacing: 6
-                                    Rectangle {
-                                        width: 4; height: 16; radius: 2
-                                        color: Theme.featureColor(modelData.typeName)
-                                    }
-                                    Text {
-                                        text: Theme.featureIcon(modelData.typeName) + " " + (modelData.label || modelData.name)
-                                        font.pixelSize: Theme.fontBase
-                                        font.bold: true
-                                        color: Theme.text
-                                        Layout.fillWidth: true
-                                        elide: Text.ElideRight
-                                    }
-                                    Rectangle {
-                                        width: typeText.implicitWidth + 8; height: 16; radius: 3
-                                        color: Qt.lighter(Theme.featureColor(modelData.typeName), 1.8)
-                                        Text {
-                                            id: typeText
-                                            anchors.centerIn: parent
-                                            text: Theme.shortTypeName(modelData.typeName)
-                                            font.pixelSize: Theme.fontXs
-                                            color: Theme.featureColor(modelData.typeName)
-                                        }
-                                    }
-                                }
-                            }
+                            // Editable parametric features fit these type strings.
+                            property bool isEditable:
+                                modelData.typeName.indexOf("Pad") >= 0      ||
+                                modelData.typeName.indexOf("Pocket") >= 0   ||
+                                modelData.typeName.indexOf("Revolution") >= 0 ||
+                                modelData.typeName.indexOf("Groove") >= 0
+                            property bool isStructural:
+                                modelData.typeName === "App::Origin" ||
+                                modelData.typeName === "App::Line"   ||
+                                modelData.typeName === "App::Plane"  ||
+                                modelData.typeName === "App::Point"
 
                             MouseArea {
                                 id: featureArea
                                 anchors.fill: parent
                                 hoverEnabled: true
+                            }
+
+                            RowLayout {
+                                anchors.left: parent.left; anchors.right: parent.right
+                                anchors.leftMargin: 12; anchors.rightMargin: 8
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: 6
+
+                                Rectangle {
+                                    Layout.preferredWidth: 4; Layout.preferredHeight: 16
+                                    radius: 2
+                                    color: Theme.featureColor(modelData.typeName)
+                                }
+                                Text {
+                                    text: Theme.featureIcon(modelData.typeName) + " " + (modelData.label || modelData.name)
+                                    font.pixelSize: Theme.fontBase
+                                    font.bold: true
+                                    color: Theme.text
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                }
+
+                                // Action buttons: compact icons, only visible
+                                // on hover so the row stays tidy when idle.
+                                Row {
+                                    spacing: 2
+                                    visible: featureArea.containsMouse && !featRow.isStructural
+
+                                    component ActionBtn: Rectangle {
+                                        property string glyph: ""
+                                        property string tip: ""
+                                        signal clicked()
+                                        width: 22; height: 22; radius: 3
+                                        color: ma.containsMouse ? Theme.accent : "transparent"
+                                        border.color: Theme.border; border.width: 1
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: parent.glyph
+                                            font.pixelSize: 11
+                                            color: ma.containsMouse ? "white" : Theme.text
+                                        }
+                                        MouseArea {
+                                            id: ma; anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: parent.clicked()
+                                        }
+                                        ToolTip.text: tip
+                                        ToolTip.visible: ma.containsMouse
+                                        ToolTip.delay: 500
+                                    }
+                                    ActionBtn {
+                                        glyph: "\u270E"   // ✎ pencil — Edit parameters
+                                        tip: "Edit"
+                                        visible: featRow.isEditable
+                                        onClicked: panel.featureEditRequested(modelData.name, modelData.typeName)
+                                    }
+                                    ActionBtn {
+                                        glyph: "\u2398"   // ⎘ copy
+                                        tip: "Duplicate"
+                                        onClicked: cadEngine.duplicateFeature(modelData.name)
+                                    }
+                                    ActionBtn {
+                                        glyph: "\u2716"   // ✖ delete
+                                        tip: "Delete"
+                                        onClicked: cadEngine.deleteFeature(modelData.name)
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.preferredWidth: typeText.implicitWidth + 8
+                                    Layout.preferredHeight: 16
+                                    radius: 3
+                                    color: Qt.lighter(Theme.featureColor(modelData.typeName), 1.8)
+                                    Text {
+                                        id: typeText
+                                        anchors.centerIn: parent
+                                        text: Theme.shortTypeName(modelData.typeName)
+                                        font.pixelSize: Theme.fontXs
+                                        color: Theme.featureColor(modelData.typeName)
+                                    }
+                                }
                             }
 
                             Rectangle {

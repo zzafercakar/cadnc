@@ -14,6 +14,9 @@
 #include <OpenGl_GraphicDriver.hxx>
 #include <Graphic3d_TransformPers.hxx>
 #include <SelectMgr_EntityOwner.hxx>
+#include <TopExp_Explorer.hxx>
+#include <TopAbs_ShapeEnum.hxx>
+#include <TopoDS.hxx>
 
 #include "FrameBuffer.h"
 #include "GlTools.h"
@@ -85,6 +88,18 @@ OccRenderer::~OccRenderer()
 void OccRenderer::synchronize(QQuickFramebufferObject* item)
 {
     scale_.store(item->window()->devicePixelRatio(), std::memory_order_relaxed);
+
+    // UI thread: drain any face picks produced by the render thread and let
+    // OccViewport forward them to CadEngine. synchronize() runs on the UI
+    // thread between render() calls, so Qt signal emission here is safe.
+    auto picks = drainPickedFaces();
+    if (!picks.empty()) {
+        if (auto* vp = const_cast<OccViewport*>(viewerItem_)) {
+            for (const auto& p : picks)
+                vp->facePickedFromRender(QString::fromStdString(p.first),
+                                         QString::fromStdString(p.second));
+        }
+    }
 }
 
 void OccRenderer::render()
@@ -211,9 +226,62 @@ void OccRenderer::render()
             Handle(AIS_InteractiveObject) detected = context_->DetectedInteractive();
             isViewCube = (!detected.IsNull() && detected == viewCube_);
         }
-        if (!isViewCube)
+        if (!isViewCube) {
             context_->SelectDetected();
+            // If the DatumPlanePanel asked for a face pick, see if the click
+            // landed on one and surface it to the UI thread.
+            if (facePickMode_.load(std::memory_order_relaxed)) {
+                tryResolveFacePick();
+            }
+        }
     }
+}
+
+// Resolve the current AIS selection into (featureName, "FaceN") if it's a
+// face pick; pushes onto pickedFaces_. Caller runs on the render thread.
+void OccRenderer::tryResolveFacePick()
+{
+    if (context_.IsNull()) return;
+
+    for (context_->InitSelected(); context_->MoreSelected(); context_->NextSelected()) {
+        Handle(AIS_InteractiveObject) ao = context_->SelectedInteractive();
+        if (ao.IsNull()) continue;
+        Handle(AIS_Shape) aisShape = Handle(AIS_Shape)::DownCast(ao);
+        if (aisShape.IsNull()) continue;
+
+        TopoDS_Shape picked = context_->SelectedShape();
+        if (picked.IsNull() || picked.ShapeType() != TopAbs_FACE) continue;
+
+        // Reverse-lookup feature name from the shapes_ map.
+        std::string featureName;
+        for (const auto& kv : shapes_) {
+            if (kv.second == aisShape) { featureName = kv.first; break; }
+        }
+        if (featureName.empty()) continue;
+
+        // Parent AIS holds the cumulative body shape; enumerate faces to
+        // determine the "FaceN" index that matches what
+        // CadDocument::featureFaceNames() produces.
+        const TopoDS_Shape& parent = aisShape->Shape();
+        int idx = 0, matched = -1;
+        for (TopExp_Explorer ex(parent, TopAbs_FACE); ex.More(); ex.Next()) {
+            ++idx;
+            if (ex.Current().IsSame(picked)) { matched = idx; break; }
+        }
+        if (matched < 0) continue;
+
+        std::string sub = "Face" + std::to_string(matched);
+        std::lock_guard<std::mutex> lk(pickMutex_);
+        pickedFaces_.emplace_back(featureName, sub);
+    }
+}
+
+std::vector<std::pair<std::string,std::string>> OccRenderer::drainPickedFaces()
+{
+    std::lock_guard<std::mutex> lk(pickMutex_);
+    std::vector<std::pair<std::string,std::string>> out;
+    out.swap(pickedFaces_);
+    return out;
 }
 
 QOpenGLFramebufferObject* OccRenderer::createFramebufferObject(const QSize& size)

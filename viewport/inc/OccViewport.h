@@ -72,9 +72,19 @@ public:
     bool sketchMode() const { return sketchMode_; }
     void setSketchMode(bool on);
 
+    /// Enable / disable face-pick mode on the render thread. When on, the
+    /// next left-click resolves the picked (feature, "FaceN") pair and the
+    /// viewport emits facePicked on the UI thread via synchronize().
+    Q_INVOKABLE void setFacePickMode(bool on);
+
+    /// Called from OccRenderer::synchronize() on the UI thread after a face
+    /// was picked. Emits facePicked so CadEngine / DatumPlanePanel can react.
+    void facePickedFromRender(const QString& featureName, const QString& subName);
+
 Q_SIGNALS:
     void viewReady();
     void sketchModeChanged();
+    void facePicked(QString featureName, QString subName);
 
 protected:
     // Mouse event handling (forwarded to AIS_ViewController on render thread)

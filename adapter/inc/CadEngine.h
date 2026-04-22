@@ -74,6 +74,11 @@ class CadEngine : public QObject {
     /// canvas grid left the OCCT grid visible underneath.
     Q_PROPERTY(bool gridVisible READ gridVisible WRITE setGridVisible NOTIFY gridVisibleChanged)
 
+    /// When true, the next viewport left-click is interpreted as a face pick
+    /// and emits facePicked(featureName, subName) instead of the usual
+    /// geometry selection. DatumPlanePanel flips this on demand.
+    Q_PROPERTY(bool facePickMode READ facePickMode WRITE setFacePickMode NOTIFY facePickModeChanged)
+
 public:
     explicit CadEngine(QObject* parent = nullptr);
     ~CadEngine() override;
@@ -99,6 +104,9 @@ public:
     Q_INVOKABLE bool deleteFeature(const QString& name);
     /// Rename a feature's label. Returns true on success.
     Q_INVOKABLE bool renameFeature(const QString& name, const QString& newLabel);
+    /// Deep-clone a feature. Returns the new feature's internal name, or
+    /// empty string on failure. Forwarded from CadDocument::duplicateFeature.
+    Q_INVOKABLE QString duplicateFeature(const QString& name);
     /// Rename the document itself (label). Different from renameFeature,
     /// which targets a DocumentObject inside the current doc.
     Q_INVOKABLE bool renameDocument(const QString& newLabel);
@@ -290,6 +298,13 @@ public:
     bool gridVisible() const { return gridVisible_; }
     void setGridVisible(bool on);
 
+    bool facePickMode() const { return facePickMode_; }
+    void setFacePickMode(bool on);
+
+    /// Render-thread callback: a face pick landed on this (feature, sub) pair.
+    /// Forwards to the facePicked signal on the UI thread.
+    void reportFacePicked(const QString& featureName, const QString& subName);
+
 Q_SIGNALS:
     void featureTreeChanged();
     void sketchChanged();
@@ -297,6 +312,8 @@ Q_SIGNALS:
     void gridSpacingChanged();
     void gridVisibleChanged();
     void undoStateChanged();
+    void facePickModeChanged();
+    void facePicked(QString featureName, QString subName);
 
 private:
     // Internal RAII wrapper that opens a FreeCAD undo transaction on entry
@@ -313,6 +330,7 @@ private:
     QString statusMessage_;
     double gridSpacing_ = 10.0;  // mm — default, matches OccRenderer initial grid
     bool   gridVisible_ = true;  // on at startup; controls both 2D canvas and 3D viewer grid
+    bool   facePickMode_ = false;
 
     void refreshSketch();
     void setStatus(const QString& msg);

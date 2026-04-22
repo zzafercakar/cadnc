@@ -51,6 +51,16 @@ void OccViewport::clearShapes()
     update();
 }
 
+void OccViewport::setFacePickMode(bool on)
+{
+    if (renderer_) renderer_->setFacePickMode(on);
+}
+
+void OccViewport::facePickedFromRender(const QString& featureName, const QString& subName)
+{
+    Q_EMIT facePicked(featureName, subName);
+}
+
 void OccViewport::fitAll()
 {
     if (renderer_)
@@ -207,7 +217,12 @@ void OccViewport::wheelEvent(QWheelEvent* event)
     double s = renderer_->scale();
     Graphic3d_Vec2i pos(static_cast<int>(event->position().x() * s),
                         static_cast<int>(event->position().y() * s));
-    double delta = event->angleDelta().y() / 8.0;
+    // One notch on a typical mouse is 120 angleDelta units. OCCT's UpdateZoom
+    // expects a factor around the same order of magnitude as the screen-space
+    // pixel delta; the previous /8 divisor under-damped that and the camera
+    // crawled in and out. /2 gives a proportional step per notch which lines
+    // up with FreeCAD's "middle-speed" feel.
+    double delta = event->angleDelta().y() / 2.0;
 
     renderer_->UpdateZoom(Aspect_ScrollDelta(pos, delta));
     update();

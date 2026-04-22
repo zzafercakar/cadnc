@@ -114,6 +114,23 @@ Item {
     // matching FreeCAD's re-open-for-edit behaviour.
     property int dimExistingId: -1
 
+    // Per-constraint label offsets for drag-to-move dimension labels. Keyed
+    // by constraint id; value is a Qt.point in screen pixels (dx, dy) added
+    // on top of the automatic placement. MilCAD / SolidWorks parity — users
+    // expect to drag dimension text out of the way.
+    property var dimOffsets: ({})
+    function dimOffsetFor(cid) {
+        var v = dimOffsets[cid]
+        return v ? v : Qt.point(0, 0)
+    }
+    function setDimOffset(cid, dx, dy) {
+        var copy = {}
+        for (var k in dimOffsets) copy[k] = dimOffsets[k]
+        copy[cid] = Qt.point(dx, dy)
+        dimOffsets = copy
+        drawCanvas.requestPaint()
+    }
+
     // ── Coordinate conversion ──────────────────────────────────────
     function toScreen(sx, sy) { return Qt.point(panX + sx * viewScale, panY - sy * viewScale) }
     function toSketch(px, py) { return Qt.point((px - panX) / viewScale, -(py - panY) / viewScale) }
@@ -561,16 +578,17 @@ Item {
                 var g = byId[c.firstGeoId]
                 if (!g) continue
 
+                var off = canvas.dimOffsetFor(c.id)
                 if (c.typeName === "Distance" && g.type === "Line") {
-                    drawDistanceLabel(ctx, g, c.value)
+                    drawDistanceLabel(ctx, g, c.value, "", off)
                 } else if (c.typeName === "Radius" && (g.type === "Arc" || g.type === "Circle")) {
-                    drawRadiusLabel(ctx, g, c.value, false)
+                    drawRadiusLabel(ctx, g, c.value, false, off)
                 } else if (c.typeName === "Diameter" && g.type === "Circle") {
-                    drawRadiusLabel(ctx, g, c.value, true)
+                    drawRadiusLabel(ctx, g, c.value, true, off)
                 } else if (c.typeName === "DistanceX" && g.type === "Line") {
-                    drawDistanceLabel(ctx, g, c.value, "X")
+                    drawDistanceLabel(ctx, g, c.value, "X", off)
                 } else if (c.typeName === "DistanceY" && g.type === "Line") {
-                    drawDistanceLabel(ctx, g, c.value, "Y")
+                    drawDistanceLabel(ctx, g, c.value, "Y", off)
                 }
             }
             ctx.restore()
@@ -579,7 +597,9 @@ Item {
         // Distance dimension: parallel offset leader with arrow tips + text.
         // `axis` is "" for euclidean distance, "X" for horizontal component,
         // "Y" for vertical — matches the three constraint flavours we expose.
-        function drawDistanceLabel(ctx, g, value, axis) {
+        // `userOffset` is a screen-pixel point (dx,dy) added to the label
+        // position so the user can drag the label clear of the geometry.
+        function drawDistanceLabel(ctx, g, value, axis, userOffset) {
             var p1 = toScreen(g.startX, g.startY)
             var p2 = toScreen(g.endX,   g.endY)
             var dx = p2.x - p1.x, dy = p2.y - p1.y
@@ -610,23 +630,34 @@ Item {
             drawArrowhead(ctx, o1x, o1y, -dx / len, -dy / len)
             drawArrowhead(ctx, o2x, o2y,  dx / len,  dy / len)
 
-            // Label background pill + value
+            // Label background pill + value. If the user dragged the label,
+            // draw a thin leader from the natural midpoint to the dragged
+            // position so the association stays visible.
             var mx = (o1x + o2x) * 0.5, my = (o1y + o2y) * 0.5
+            var lx = mx + (userOffset ? userOffset.x : 0)
+            var ly = my + (userOffset ? userOffset.y : 0)
+            if (userOffset && (userOffset.x !== 0 || userOffset.y !== 0)) {
+                ctx.save()
+                ctx.strokeStyle = "#9CA3AF"
+                ctx.setLineDash([3, 3])
+                ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(lx, ly); ctx.stroke()
+                ctx.restore()
+            }
             var prefix = (axis === "X") ? "" : (axis === "Y") ? "" : ""
             var label = prefix + value.toFixed(2)
             var tw = ctx.measureText(label).width + 8
             ctx.fillStyle = "#FFFFFF"
-            ctx.fillRect(mx - tw/2, my - 8, tw, 16)
+            ctx.fillRect(lx - tw/2, ly - 8, tw, 16)
             ctx.strokeStyle = "#1F2937"
-            ctx.strokeRect(mx - tw/2, my - 8, tw, 16)
+            ctx.strokeRect(lx - tw/2, ly - 8, tw, 16)
             ctx.fillStyle = "#1F2937"
-            ctx.fillText(label, mx, my)
+            ctx.fillText(label, lx, ly)
         }
 
         // Radius / diameter leader: line from the circle edge outward at 30°
         // then a short horizontal run + label. "R" prefix for radius, "Ø"
         // for diameter.
-        function drawRadiusLabel(ctx, g, value, isDiameter) {
+        function drawRadiusLabel(ctx, g, value, isDiameter, userOffset) {
             var c = toScreen(g.centerX, g.centerY)
             var rpx = g.radius * viewScale
             if (rpx < 2) return
@@ -653,12 +684,24 @@ Item {
             var tw = ctx.measureText(label).width + 8
             var tx = lx + (Math.cos(theta) >= 0 ? tw / 2 + 4 : -tw / 2 - 4)
             var ty = ly - 2
+            // Apply optional drag offset, with a dashed leader back to the
+            // natural label position when dragged.
+            var dx = (userOffset ? userOffset.x : 0)
+            var dy = (userOffset ? userOffset.y : 0)
+            var fx = tx + dx, fy = ty + dy
+            if (dx !== 0 || dy !== 0) {
+                ctx.save()
+                ctx.strokeStyle = "#9CA3AF"
+                ctx.setLineDash([3, 3])
+                ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(fx, fy); ctx.stroke()
+                ctx.restore()
+            }
             ctx.fillStyle = "#FFFFFF"
-            ctx.fillRect(tx - tw/2, ty - 8, tw, 16)
+            ctx.fillRect(fx - tw/2, fy - 8, tw, 16)
             ctx.strokeStyle = "#1F2937"
-            ctx.strokeRect(tx - tw/2, ty - 8, tw, 16)
+            ctx.strokeRect(fx - tw/2, fy - 8, tw, 16)
             ctx.fillStyle = "#1F2937"
-            ctx.fillText(label, tx, ty)
+            ctx.fillText(label, fx, fy)
         }
 
         // Solid triangle at (px, py) pointing along (dirX, dirY). Size fixed
@@ -835,6 +878,125 @@ Item {
         Connections {
             target: cadEngine
             function onSketchChanged() { drawCanvas.requestPaint() }
+        }
+    }
+
+    // ── Draggable dimension label handles ──────────────────────────────
+    // The Canvas paints static leaders, arrows and pills, but it cannot be
+    // interacted with on a per-label basis. We overlay a transparent MouseArea
+    // per dimension whose position mirrors the painted label; dragging it
+    // updates `dimOffsets[constraintId]` so the Canvas repaints the label at
+    // the new spot.
+    Repeater {
+        id: dimHandleRepeater
+        z: 5
+        model: cadEngine.sketchConstraints
+        delegate: Item {
+            id: handle
+            required property var modelData
+            required property int index
+
+            // Look up the matching geometry so we can mirror drawDistanceLabel /
+            // drawRadiusLabel positioning. Rebuilds when the sketch changes.
+            readonly property var geoList: cadEngine.sketchGeometry
+            function findGeo(gid) {
+                for (var i = 0; i < geoList.length; i++)
+                    if (geoList[i].id === gid) return geoList[i]
+                return null
+            }
+            readonly property var geo: findGeo(modelData.firstGeoId)
+
+            // Compute the (natural) anchor point + raw offset in the same way
+            // the canvas does. A little duplication, but keeping the two
+            // coordinate systems derived from the same input is the easiest
+            // way to stop them drifting.
+            function anchorPoint() {
+                if (!geo) return null
+                var off = canvas.dimOffsetFor(modelData.id)
+                if (modelData.typeName === "Distance" ||
+                    modelData.typeName === "DistanceX" ||
+                    modelData.typeName === "DistanceY") {
+                    if (geo.type !== "Line") return null
+                    var p1 = canvas.toScreen(geo.startX, geo.startY)
+                    var p2 = canvas.toScreen(geo.endX,   geo.endY)
+                    var dx = p2.x - p1.x, dy = p2.y - p1.y
+                    var len = Math.sqrt(dx*dx + dy*dy)
+                    if (len < 1) return null
+                    var nx = -dy / len, ny = dx / len
+                    var o1x = p1.x + nx * 18, o1y = p1.y + ny * 18
+                    var o2x = p2.x + nx * 18, o2y = p2.y + ny * 18
+                    return Qt.point((o1x + o2x) * 0.5 + off.x,
+                                    (o1y + o2y) * 0.5 + off.y)
+                }
+                if (modelData.typeName === "Radius" || modelData.typeName === "Diameter") {
+                    if (geo.type !== "Arc" && geo.type !== "Circle") return null
+                    var c = canvas.toScreen(geo.centerX, geo.centerY)
+                    var rpx = geo.radius * canvas.viewScale
+                    var theta = Math.PI / 6
+                    if (geo.type === "Arc" && typeof geo.startAngle === "number")
+                        theta = (geo.startAngle + geo.endAngle) * 0.5
+                    var ex = c.x + Math.cos(theta) * rpx
+                    var ey = c.y - Math.sin(theta) * rpx
+                    var lx = ex + Math.cos(theta) * 28
+                    var ly = ey - Math.sin(theta) * 28
+                    var tx = lx + (Math.cos(theta) >= 0 ? 4 : -4)
+                    var ty = ly - 2
+                    return Qt.point(tx + off.x, ty + off.y)
+                }
+                return null
+            }
+
+            readonly property var ap: anchorPoint()
+            visible: ap !== null &&
+                     (modelData.typeName === "Distance" ||
+                      modelData.typeName === "DistanceX" ||
+                      modelData.typeName === "DistanceY" ||
+                      modelData.typeName === "Radius" ||
+                      modelData.typeName === "Diameter")
+
+            // A 52×20 transparent grab area centered on the label pill.
+            // Matches the largest label footprint (value up to 7 chars).
+            width: 56; height: 20
+            x: visible ? ap.x - width / 2 : -1000
+            y: visible ? ap.y - height / 2 : -1000
+
+            MouseArea {
+                id: dragArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.SizeAllCursor
+                property real dragStartX: 0
+                property real dragStartY: 0
+                property real originDx: 0
+                property real originDy: 0
+                onPressed: function(mouse) {
+                    dragStartX = mouse.x + handle.x
+                    dragStartY = mouse.y + handle.y
+                    var o = canvas.dimOffsetFor(handle.modelData.id)
+                    originDx = o.x; originDy = o.y
+                }
+                onPositionChanged: function(mouse) {
+                    if (!pressed) return
+                    var abs = Qt.point(mouse.x + handle.x, mouse.y + handle.y)
+                    var dx = abs.x - dragStartX
+                    var dy = abs.y - dragStartY
+                    canvas.setDimOffset(handle.modelData.id,
+                                        originDx + dx, originDy + dy)
+                }
+                // Double-click the label to reopen Smart Dimension editor on
+                // the same constraint — fast way to re-datum without hunting
+                // through geometry.
+                onDoubleClicked: {
+                    if (handle.modelData.typeName === "Radius" ||
+                        handle.modelData.typeName === "Diameter") {
+                        canvas.beginDimension(handle.modelData.firstGeoId,
+                                              handle.ap.x, handle.ap.y)
+                    } else {
+                        canvas.beginDimension(handle.modelData.firstGeoId,
+                                              handle.ap.x, handle.ap.y)
+                    }
+                }
+            }
         }
     }
 
@@ -1359,6 +1521,13 @@ Item {
         dimKind = ""
         dimExistingId = -1
         dimEditor.visible = false
+        // Drop the selection highlight so the geometry flips back to its
+        // solver-derived colour (green when fully constrained) instead of
+        // staying orange after the dimension commits.
+        canvas.selectedGeo = -1
+        canvas.selectedGeos = []
+        canvas.hoveredGeo = -1
+        canvas.requestPaint()
     }
 
     // Find a vertex (endpoint) near pixel (mx,my). Returns {geoId, posId} or null.
