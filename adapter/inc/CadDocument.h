@@ -66,6 +66,12 @@ public:
     /// Empty string on failure.
     std::string duplicateFeature(const std::string& name);
 
+    /// True when the document has unsaved changes. Wraps FreeCAD's
+    /// `App::Document::isTouched()` which is set on any property mutation
+    /// and cleared on save. Used by the UI to prompt the user before
+    /// close/new if they haven't saved their work.
+    bool isModified() const;
+
     /// Toggle the feature's `Visibility` property (FreeCAD PropertyBool).
     /// Returns the new state, or false for unknown names. The viewport
     /// reads this on the next `updateViewportShapes()` pass.

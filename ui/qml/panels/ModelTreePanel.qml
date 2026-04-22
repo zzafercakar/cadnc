@@ -29,6 +29,10 @@ Rectangle {
     // context menu (right-click → "Add Datum Plane"). Main.qml routes
     // to cadEngine.addDatumPlane with a sensible default offset.
     signal newDatumPlaneRequested()
+    // Emitted when a user-created PartDesign::Plane (datum plane) is
+    // double-clicked; Main.qml routes to createSketchOnPlane so the new
+    // sketch is actually attached to that plane, not the default XY.
+    signal datumPlaneDoubleClicked(string planeName)
 
     property int selectedIndex: -1
 
@@ -471,11 +475,18 @@ Rectangle {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                // Menu.popup() with no parent anchors to the
-                                // window at (0,0) on some Qt versions. Pin it
-                                // just below the + button so the user sees it
-                                // exactly where they clicked.
-                                bodyQuickMenu.popup(plusArea, 0, plusArea.height)
+                                // Position the Popup directly by mapping this
+                                // row's coordinate space to the panel root, so
+                                // it lands right under the + button regardless
+                                // of scroll / screen position. Menu.popup() on
+                                // some Qt versions was silently pinning to (0,0)
+                                // which looked broken to the user.
+                                var mapped = plusArea.mapToItem(panel,
+                                                                plusArea.width - 180,
+                                                                plusArea.height)
+                                bodyQuickPopup.x = mapped.x
+                                bodyQuickPopup.y = mapped.y
+                                bodyQuickPopup.open()
                             }
                         }
                         ToolTip.text: "Quick actions"
@@ -501,12 +512,29 @@ Rectangle {
                 MouseArea {
                     id: mouseArea
                     anchors.fill: parent
+                    // z:-1 so caretArea (inside the RowLayout, which is a
+                    // later sibling with default z=0) gets the click first
+                    // and can toggle expansion. Without this the outer
+                    // MouseArea swallowed the event and the caret was inert.
+                    z: -1
                     hoverEnabled: true
                     enabled: !modelData.isDivider
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
 
                     onClicked: function(mouse) {
                         panel.selectedIndex = index
+                        // Defence-in-depth for expand/collapse: if the click
+                        // landed within the caret gutter (indent + 14px)
+                        // and this is a container, toggle here too.
+                        if (mouse.button === Qt.LeftButton &&
+                            modelData.hasChildren &&
+                            mouse.x < delegate.indentPx + 14) {
+                            var cp = panel.expanded
+                            cp[modelData.name] = !(cp[modelData.name] !== false)
+                            panel.expanded = cp
+                            treeView.refresh()
+                            return
+                        }
                         if (mouse.button === Qt.RightButton) {
                             contextMenu.targetIndex = index
                             contextMenu.targetName = modelData.name
@@ -516,15 +544,22 @@ Rectangle {
                     }
                     onDoubleClicked: {
                         var t = modelData.typeName
-                        if (t.indexOf("Sketch") >= 0) {
+                        if (t.indexOf("Sketcher::SketchObject") >= 0) {
                             sketchDoubleClicked(modelData.name)
                         }
-                        // Datum plane under Origin → start a sketch on it.
-                        // UX-016: XY/XZ/YZ_Plane double-click creates a sketch
-                        // on that plane (matches FreeCAD / SolidWorks behaviour).
+                        // Base plane (XY/XZ/YZ under Origin) — create sketch
+                        // by planeType index (0/1/2).
                         else if (t === "App::Plane") {
                             var pt = panel.planeTypeForName(modelData.label, modelData.name)
                             if (pt >= 0) planeDoubleClicked(modelData.name, pt)
+                        }
+                        // User-created PartDesign datum plane — create sketch
+                        // attached to THAT plane feature (not XY). Emits
+                        // datumPlaneDoubleClicked so Main.qml can route to
+                        // CadEngine::createSketchOnPlane. Fixes user report
+                        // "sketch offset but drawing still on base plane".
+                        else if (t.indexOf("PartDesign::Plane") >= 0) {
+                            datumPlaneDoubleClicked(modelData.name)
                         }
                         // Editable PartDesign features → task panel.
                         else if (t.indexOf("Pad") >= 0 || t.indexOf("Pocket") >= 0 ||
@@ -702,16 +737,54 @@ Rectangle {
         }
     }
 
-    // Quick-action menu triggered by the "+" button on the Body row
-    Menu {
-        id: bodyQuickMenu
-        MenuItem {
-            text: "New Sketch\u2026"
-            onTriggered: panel.newSketchRequested()
+    // Quick-action menu triggered by the "+" button on the Body row.
+    // Implemented as a Popup (instead of a Menu) because Menu.popup() was
+    // flaky across Qt versions — on some setups it anchored to (0,0) of
+    // the Overlay and looked like the click did nothing. Popup gives us
+    // explicit x/y so the user sees it right under the + button every time.
+    Popup {
+        id: bodyQuickPopup
+        padding: 4
+        width: 200
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent | Popup.CloseOnPressOutside
+        background: Rectangle {
+            color: Theme.panel
+            border.color: Theme.accent
+            border.width: 1
+            radius: 6
         }
-        MenuItem {
-            text: "Add Datum Plane\u2026"
-            onTriggered: panel.newDatumPlaneRequested()
+        contentItem: Column {
+            spacing: 2
+            Repeater {
+                model: [
+                    { label: qsTr("New Sketch\u2026"),        sig: "sketch" },
+                    { label: qsTr("Add Datum Plane\u2026"),   sig: "plane"  }
+                ]
+                delegate: Rectangle {
+                    required property var modelData
+                    width: bodyQuickPopup.availableWidth
+                    height: 30
+                    radius: 4
+                    color: bqArea.containsMouse ? Theme.accent : "transparent"
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left; anchors.leftMargin: 10
+                        text: modelData.label
+                        font.pixelSize: Theme.fontBase
+                        color: bqArea.containsMouse ? "white" : Theme.text
+                    }
+                    MouseArea {
+                        id: bqArea; anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            bodyQuickPopup.close()
+                            if (modelData.sig === "sketch") panel.newSketchRequested()
+                            else if (modelData.sig === "plane") panel.newDatumPlaneRequested()
+                        }
+                    }
+                }
+            }
         }
     }
 

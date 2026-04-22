@@ -889,10 +889,14 @@ Item {
     // the new spot.
     Repeater {
         id: dimHandleRepeater
-        z: 5
         model: cadEngine.sketchConstraints
         delegate: Item {
             id: handle
+            // z:100 lifts each handle above the drawArea MouseArea so drag
+            // clicks hit the handle's own MouseArea instead of being
+            // swallowed by the canvas. Repeater's own z doesn't propagate
+            // to delegates, so each delegate sets z itself.
+            z: 100
             required property var modelData
             required property int index
 

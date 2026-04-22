@@ -62,6 +62,10 @@ class CadEngine : public QObject {
     /// Current document file path (empty if not saved)
     Q_PROPERTY(QString documentPath READ documentPath NOTIFY featureTreeChanged)
 
+    /// True when the document has unsaved changes. Bound to FreeCAD's
+    /// isTouched() — used by the QML close/new flow to prompt the user.
+    Q_PROPERTY(bool documentModified READ documentModified NOTIFY featureTreeChanged)
+
     /// Current document name
     Q_PROPERTY(QString documentName READ documentName NOTIFY featureTreeChanged)
 
@@ -291,6 +295,7 @@ public:
     bool hasDocument() const;
     QString documentPath() const;
     QString documentName() const;
+    bool documentModified() const;
 
     double gridSpacing() const { return gridSpacing_; }
     void setGridSpacing(double mm);

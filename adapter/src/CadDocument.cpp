@@ -427,6 +427,15 @@ bool CadDocument::renameFeature(const std::string& name, const std::string& newL
     return true;
 }
 
+bool CadDocument::isModified() const
+{
+    if (!impl_->doc) return false;
+    // FreeCAD's `isTouched()` flips true on any property write and resets
+    // after a successful save. Use that as our single source of truth
+    // rather than tracking mutations ourselves in the adapter.
+    return impl_->doc->isTouched();
+}
+
 std::string CadDocument::duplicateFeature(const std::string& name)
 {
     if (!impl_->doc) return {};

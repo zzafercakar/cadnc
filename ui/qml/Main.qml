@@ -20,6 +20,18 @@ ApplicationWindow {
     visible: true
     color: Theme.bg
 
+    // Intercept the window close button (X) and the task bar Quit signal
+    // so we can prompt the user to save any pending work. close.accepted=false
+    // keeps the window alive; the unsavedDialog triggers Qt.quit() when the
+    // user picks Save or Discard.
+    onClosing: function(close) {
+        if (cadEngine.hasDocument && cadEngine.documentModified) {
+            close.accepted = false
+            unsavedDialog.pendingAction = "quit"
+            unsavedDialog.open()
+        }
+    }
+
     // ─── App State ─────────────────────────────────────────────────
     property int    currentWorkbench: 0    // 0=Part, 1=Sketch, 2=CAM, 3=Nesting
     property string currentStatus:   qsTr("Ready")
@@ -116,10 +128,7 @@ ApplicationWindow {
             Action {
                 text: qsTr("Close")
                 enabled: cadEngine.hasDocument
-                onTriggered: {
-                    cadEngine.closeDocument()
-                    mainWindow.title = "CADNC v" + appVersion
-                }
+                onTriggered: requestClose()
             }
             MenuSeparator {}
             Menu {
@@ -542,6 +551,13 @@ ApplicationWindow {
                     cadEngine.createSketch("Sketch", planeType)
                     mainWindow.currentWorkbench = 1
                 }
+                onDatumPlaneDoubleClicked: function(planeName) {
+                    // User-created PartDesign::Plane. Attach a new sketch
+                    // directly to it so geometry lands in the plane's local
+                    // frame (with any Rot/Offset/Face attachment baked in).
+                    cadEngine.createSketchOnPlane("Sketch", planeName)
+                    mainWindow.currentWorkbench = 1
+                }
                 // Header button + context menu "New Sketch"
                 onNewSketchRequested: sketchPlaneDialog.open()
                 // Right-click → "Add Datum Plane…" — swap the tree for the
@@ -858,6 +874,9 @@ ApplicationWindow {
     FileDialog {
         id: saveDialog
         title: "Save As"
+        // Optional "save then do X" chain — unsavedDialog sets this so it
+        // can continue with New/Close/Quit after the user picks a path.
+        property var afterSave: null
         // Keep native project as the ONLY primary save target. Geometry-only
         // formats (STEP, IGES, STL, DXF, OBJ) are available from File →
         // Export instead, which routes to `exportDialog` and then to
@@ -878,9 +897,16 @@ ApplicationWindow {
             if (ext !== "cadnc" && ext !== "fcstd") {
                 path += ".cadnc"; ext = "cadnc"
             }
-            if (cadEngine.saveDocumentAs(path))
+            if (cadEngine.saveDocumentAs(path)) {
                 mainWindow.title = "CADNC v" + appVersion + " — " + path.split("/").pop()
+                if (saveDialog.afterSave) {
+                    var cb = saveDialog.afterSave
+                    saveDialog.afterSave = null
+                    cb()
+                }
+            }
         }
+        onRejected: afterSave = null
     }
 
     FileDialog {
@@ -970,7 +996,91 @@ ApplicationWindow {
 
     // ─── New Document Dialog (MilCAD-style 3-option popup) ────────────
     function requestNew() {
+        // Prompt to save first if the user has unsaved work; otherwise
+        // we'd silently discard their sketch when they pick a template.
+        if (cadEngine.hasDocument && cadEngine.documentModified) {
+            unsavedDialog.pendingAction = "new"
+            unsavedDialog.open()
+            return
+        }
         newDocDialog.open()
+    }
+    function requestClose() {
+        if (cadEngine.hasDocument && cadEngine.documentModified) {
+            unsavedDialog.pendingAction = "close"
+            unsavedDialog.open()
+            return
+        }
+        cadEngine.closeDocument()
+        mainWindow.title = "CADNC v" + appVersion
+    }
+
+    // Prompt the user to save before discarding changes. pendingAction
+    // decides what to do after the answer — "new" opens newDocDialog,
+    // "close" tears the current document down, "quit" exits the app.
+    Popup {
+        id: unsavedDialog
+        property string pendingAction: ""
+        modal: true; focus: true; padding: 0
+        width: 420; height: uCol.implicitHeight + 24
+        x: (mainWindow.width - width) / 2; y: (mainWindow.height - height) / 2
+        closePolicy: Popup.CloseOnEscape
+        background: Rectangle {
+            radius: Theme.radiusLg
+            color: Theme.panel
+            border.color: Theme.warning
+            border.width: 2
+        }
+        function proceed() {
+            if (pendingAction === "new") {
+                newDocDialog.open()
+            } else if (pendingAction === "close") {
+                cadEngine.closeDocument()
+                mainWindow.title = "CADNC v" + appVersion
+            } else if (pendingAction === "quit") {
+                Qt.quit()
+            }
+            pendingAction = ""
+        }
+        contentItem: Column {
+            id: uCol; padding: 18; spacing: 12
+            Text {
+                text: qsTr("Unsaved changes")
+                font.pixelSize: 16; font.bold: true
+                color: Theme.text
+            }
+            Text {
+                width: 384
+                text: qsTr("The current document has unsaved changes. "
+                         + "What would you like to do?")
+                wrapMode: Text.Wrap
+                font.pixelSize: 12
+                color: Theme.textSec
+            }
+            Row {
+                spacing: 8
+                Button {
+                    text: qsTr("Save")
+                    onClicked: {
+                        unsavedDialog.close()
+                        if (cadEngine.documentPath !== "") {
+                            if (cadEngine.saveDocument()) unsavedDialog.proceed()
+                        } else {
+                            saveDialog.afterSave = function() { unsavedDialog.proceed() }
+                            saveDialog.open()
+                        }
+                    }
+                }
+                Button {
+                    text: qsTr("Discard")
+                    onClicked: { unsavedDialog.close(); unsavedDialog.proceed() }
+                }
+                Button {
+                    text: qsTr("Cancel")
+                    onClicked: { unsavedDialog.pendingAction = ""; unsavedDialog.close() }
+                }
+            }
+        }
     }
 
     Popup {

@@ -1431,13 +1431,17 @@ QString CadEngine::solve()
         case SolveResult::Conflicting:      solverStatus_ = "Conflicting"; break;
         case SolveResult::Redundant:
             // Redundant means the sketch has extra constraints that don't
-            // add information — it's still fully solved. User feedback:
-            // the geometry should stay green; only a small warning badge
-            // should hint at redundancy. We surface both signals via the
-            // status string so drawGeometry can keep green when DoF=0.
-            solverStatus_ = dof == 0
-                ? "Fully Constrained (Redundant)"
-                : "Redundant";
+            // add information. When DoF=0 the geometry is effectively fully
+            // constrained (the redundancy is purely informational). When
+            // DoF>0 the sketch is still under-constrained and the redundancy
+            // is a side-effect of solver ordering — treat like Under so the
+            // colour stays blue, not amber. User feedback: seeing orange
+            // after every new constraint was confusing because the geometry
+            // was clearly not over-determined.
+            if (dof == 0)
+                solverStatus_ = "Fully Constrained (Redundant)";
+            else
+                solverStatus_ = QString("Under Constrained (Redundant, %1 DoF)").arg(dof);
             break;
         case SolveResult::SolverError:      solverStatus_ = "Solver Error"; break;
     }
@@ -1556,6 +1560,10 @@ bool CadEngine::canRedo() const
 
 bool CadEngine::hasDocument() const { return document_ != nullptr; }
 QString CadEngine::documentPath() const { return documentPath_; }
+bool CadEngine::documentModified() const
+{
+    return document_ ? document_->isModified() : false;
+}
 QString CadEngine::documentName() const
 {
     if (!document_) return {};
