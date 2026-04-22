@@ -15,6 +15,7 @@
 #include <QString>
 #include <QStringList>
 #include <memory>
+#include <unordered_map>
 
 namespace CADNC {
 
@@ -46,9 +47,11 @@ class CadEngine : public QObject {
     /// Whether a sketch is currently active
     Q_PROPERTY(bool sketchActive READ sketchActive NOTIFY sketchChanged)
 
-    /// Undo/redo availability
-    Q_PROPERTY(bool canUndo READ canUndo NOTIFY featureTreeChanged)
-    Q_PROPERTY(bool canRedo READ canRedo NOTIFY featureTreeChanged)
+    /// Undo/redo availability. NOTIFY needs to fire after sketch mutations too
+    /// (otherwise the Edit menu shortcut stays disabled after drawing), so we
+    /// emit a dedicated undoStateChanged on every TxScope commit.
+    Q_PROPERTY(bool canUndo READ canUndo NOTIFY undoStateChanged)
+    Q_PROPERTY(bool canRedo READ canRedo NOTIFY undoStateChanged)
 
     /// List of sketch names for feature dialog dropdowns
     Q_PROPERTY(QStringList sketchNames READ sketchNames NOTIFY featureTreeChanged)
@@ -61,6 +64,15 @@ class CadEngine : public QObject {
 
     /// Current document name
     Q_PROPERTY(QString documentName READ documentName NOTIFY featureTreeChanged)
+
+    /// Grid spacing in mm — single source of truth for the 2D Sketch canvas
+    /// and the OCCT 3D viewport grid. Editable from status bar.
+    Q_PROPERTY(double gridSpacing READ gridSpacing WRITE setGridSpacing NOTIFY gridSpacingChanged)
+
+    /// Grid visibility — single source for both the 2D SketchCanvas overlay
+    /// and the OCCT 3D viewport grid. Fixes BUG-013 where toggling the sketch
+    /// canvas grid left the OCCT grid visible underneath.
+    Q_PROPERTY(bool gridVisible READ gridVisible WRITE setGridVisible NOTIFY gridVisibleChanged)
 
 public:
     explicit CadEngine(QObject* parent = nullptr);
@@ -87,10 +99,54 @@ public:
     Q_INVOKABLE bool deleteFeature(const QString& name);
     /// Rename a feature's label. Returns true on success.
     Q_INVOKABLE bool renameFeature(const QString& name, const QString& newLabel);
+    /// Rename the document itself (label). Different from renameFeature,
+    /// which targets a DocumentObject inside the current doc.
+    Q_INVOKABLE bool renameDocument(const QString& newLabel);
+    /// UX-017: toggle a feature's `Visibility` property and refresh the
+    /// viewport. Returns the new visibility state.
+    Q_INVOKABLE bool toggleFeatureVisibility(const QString& name);
+    Q_INVOKABLE bool isFeatureVisible(const QString& name) const;
+    /// UX-017: list features that consume the given feature (used to warn
+    /// before deletion and to show a "Dependencies" submenu).
+    Q_INVOKABLE QStringList featureDependents(const QString& name) const;
 
     // ── Sketch lifecycle ────────────────────────────────────────────
     /// Create a new sketch. planeType: 0=XY, 1=XZ, 2=YZ
     Q_INVOKABLE bool createSketch(const QString& name = "Sketch", int planeType = 0);
+    /// Create a sketch attached to an existing face. subElement is a FreeCAD
+    /// sub-name like "Face1" (1-based, matching TopoDS_Shape::TopoDS_Iterator
+    /// order). Uses Attacher::mmFlatFace so the sketch plane is derived from
+    /// the face geometry on recompute.
+    Q_INVOKABLE bool createSketchOnFace(const QString& name,
+                                         const QString& featureName,
+                                         const QString& subElement);
+    /// Enumerate editable faces of a feature — used by the sketch-plane
+    /// picker UI when "On Face" is chosen. Returns list of "Face1", "Face2"...
+    Q_INVOKABLE QStringList featureFaces(const QString& featureName) const;
+    /// Create a new datum plane offset from one of the base planes.
+    /// basePlane: 0=XY, 1=XZ, 2=YZ. Returns the plane's internal name.
+    Q_INVOKABLE QString addDatumPlane(int basePlane, double offset,
+                                       const QString& label = "DatumPlane");
+    /// Datum plane with tilt angles relative to the base plane. rotXDeg
+    /// / rotYDeg are applied to the local X/Y axes before translation.
+    Q_INVOKABLE QString addDatumPlaneRotated(int basePlane, double offset,
+                                              double rotXDeg, double rotYDeg,
+                                              const QString& label = "DatumPlane");
+    /// Datum plane attached to a face of an existing solid feature.
+    Q_INVOKABLE QString addDatumPlaneOnFace(const QString& featureName,
+                                             const QString& faceName,
+                                             double offset,
+                                             const QString& label = "DatumPlane");
+    /// List datum / base plane feature names so the sketch-plane picker
+    /// can offer them alongside XY/XZ/YZ. Each entry is a QVariantMap
+    /// with `name` (internal) + `label` (display) + `type`
+    /// ("base" | "datum").
+    Q_INVOKABLE QVariantList availableSketchPlanes() const;
+    /// Start a sketch on a named plane (base or custom datum). Used by
+    /// the sketch-plane picker when the user chose a datum from the
+    /// list. Returns true on success.
+    Q_INVOKABLE bool createSketchOnPlane(const QString& name,
+                                          const QString& planeFeatureName);
     Q_INVOKABLE bool openSketch(const QString& name);
     Q_INVOKABLE void closeSketch();
 
@@ -140,6 +196,28 @@ public:
     Q_INVOKABLE QString pocket(const QString& sketchName, double depth);
     Q_INVOKABLE QString revolution(const QString& sketchName, double angleDeg);
     Q_INVOKABLE QString groove(const QString& sketchName, double angleDeg);
+
+    // ── Parametric edit (UX-010 / UX-011) ──────────────────────────
+    /// Returns a map with the editable parameters of an existing feature.
+    /// Keys: typeName, sketchName, length, angle, reversed, editable (bool).
+    /// editable=false means the feature was produced by the OCCT fallback
+    /// path and can't be mutated in place — the UI should fall back to the
+    /// create-new flow in that case.
+    Q_INVOKABLE QVariantMap getFeatureParams(const QString& featureName);
+    Q_INVOKABLE bool updatePad(const QString& featureName, double length, bool reversed);
+    Q_INVOKABLE bool updatePocket(const QString& featureName, double depth, bool reversed);
+    Q_INVOKABLE bool updateRevolution(const QString& featureName, double angleDeg);
+    Q_INVOKABLE bool updateGroove(const QString& featureName, double angleDeg);
+
+    // UX-008: rich Pad/Pocket — the QML task panel passes sideType/method/
+    // length2 together. `opts` is a QVariantMap with any of:
+    //   length (double), length2 (double), reversed (bool),
+    //   sideType ("One side"/"Two sides"/"Symmetric"),
+    //   method   ("Length"/"ThroughAll")
+    Q_INVOKABLE QString padEx(const QString& sketchName, const QVariantMap& opts);
+    Q_INVOKABLE QString pocketEx(const QString& sketchName, const QVariantMap& opts);
+    Q_INVOKABLE bool updatePadEx(const QString& featureName, const QVariantMap& opts);
+    Q_INVOKABLE bool updatePocketEx(const QString& featureName, const QVariantMap& opts);
 
     // Boolean operations
     Q_INVOKABLE QString booleanFuse(const QString& baseName, const QString& toolName);
@@ -198,22 +276,43 @@ public:
     bool canUndo() const;
     bool canRedo() const;
     QStringList sketchNames() const;
+    /// Names of solid/shape features that can host a sketch (Pad, Pocket,
+    /// Revolution, primitives, booleans, fillets, chamfers — everything
+    /// producing a non-null TopoDS_Shape).
+    Q_INVOKABLE QStringList solidFeatureNames() const;
     bool hasDocument() const;
     QString documentPath() const;
     QString documentName() const;
+
+    double gridSpacing() const { return gridSpacing_; }
+    void setGridSpacing(double mm);
+
+    bool gridVisible() const { return gridVisible_; }
+    void setGridVisible(bool on);
 
 Q_SIGNALS:
     void featureTreeChanged();
     void sketchChanged();
     void statusMessageChanged();
+    void gridSpacingChanged();
+    void gridVisibleChanged();
+    void undoStateChanged();
 
 private:
+    // Internal RAII wrapper that opens a FreeCAD undo transaction on entry
+    // and commits it on exit (definition in .cpp).
+    struct TxScope;
+    friend struct TxScope;
+
     std::unique_ptr<CadSession> session_;
     std::shared_ptr<CadDocument> document_;
     std::shared_ptr<SketchFacade> activeSketch_;
     std::string activeSketchName_;   // name of sketch being edited (for viewport sync)
+    std::unordered_map<std::string, int> sketchPlanes_;  // sketch name → planeType (0/1/2)
     QString solverStatus_;
     QString statusMessage_;
+    double gridSpacing_ = 10.0;  // mm — default, matches OccRenderer initial grid
+    bool   gridVisible_ = true;  // on at startup; controls both 2D canvas and 3D viewer grid
 
     void refreshSketch();
     void setStatus(const QString& msg);

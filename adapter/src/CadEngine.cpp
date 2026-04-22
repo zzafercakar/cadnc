@@ -10,9 +10,31 @@
 #include <cmath>
 #include <TopoDS_Shape.hxx>
 #include <Quantity_Color.hxx>
+#include <App/Document.h>
+#include <App/PropertyStandard.h>
 #include <Mod/Part/App/PartFeature.h>
 
 namespace CADNC {
+
+// RAII transaction scope: open on construction, commit on destruction. Keeps
+// Q_INVOKABLE mutation methods from littering the code with explicit commit
+// calls in every early-return branch.
+struct CadEngine::TxScope {
+    CadEngine* engine;
+    TxScope(CadEngine* e, const char* name) : engine(e) {
+        if (engine && engine->document_) engine->document_->openTransaction(name);
+    }
+    ~TxScope() {
+        if (engine && engine->document_) {
+            engine->document_->commitTransaction();
+            // Notify QML so Edit > Undo / Redo actions (and toolbar buttons)
+            // pick up the new availability immediately after each operation.
+            Q_EMIT engine->undoStateChanged();
+        }
+    }
+    TxScope(const TxScope&) = delete;
+    TxScope& operator=(const TxScope&) = delete;
+};
 
 CadEngine::CadEngine(QObject* parent)
     : QObject(parent)
@@ -159,6 +181,8 @@ void CadEngine::undo()
         document_->undo();
         refreshSketch();
         Q_EMIT featureTreeChanged();
+        Q_EMIT undoStateChanged();
+        updateViewportShapes();
     }
 }
 
@@ -168,6 +192,8 @@ void CadEngine::redo()
         document_->redo();
         refreshSketch();
         Q_EMIT featureTreeChanged();
+        Q_EMIT undoStateChanged();
+        updateViewportShapes();
     }
 }
 
@@ -181,6 +207,7 @@ bool CadEngine::deleteFeature(const QString& name)
         return false;
     }
 
+    TxScope tx(this, "Delete Feature");
     bool ok = document_->deleteFeature(name.toStdString());
     if (ok) {
         setStatus("Deleted: " + name);
@@ -204,6 +231,44 @@ bool CadEngine::renameFeature(const QString& name, const QString& newLabel)
     return ok;
 }
 
+bool CadEngine::renameDocument(const QString& newLabel)
+{
+    if (!document_ || newLabel.isEmpty()) return false;
+    // The FreeCAD document's display label goes through its `Label`
+    // property; its internal name (returned by getName()) is immutable.
+    auto* doc = static_cast<App::Document*>(document_->internalDoc());
+    if (!doc) return false;
+    doc->Label.setValue(newLabel.toStdString());
+    setStatus("Document: " + newLabel);
+    Q_EMIT featureTreeChanged();
+    return true;
+}
+
+bool CadEngine::toggleFeatureVisibility(const QString& name)
+{
+    if (!document_) return false;
+    bool now = document_->toggleVisibility(name.toStdString());
+    setStatus(QString("%1: %2").arg(name, now ? "shown" : "hidden"));
+    updateViewportShapes();
+    Q_EMIT featureTreeChanged();
+    return now;
+}
+
+bool CadEngine::isFeatureVisible(const QString& name) const
+{
+    if (!document_) return false;
+    return document_->isVisible(name.toStdString());
+}
+
+QStringList CadEngine::featureDependents(const QString& name) const
+{
+    QStringList out;
+    if (!document_) return out;
+    for (const auto& s : document_->dependents(name.toStdString()))
+        out.append(QString::fromStdString(s));
+    return out;
+}
+
 // ── Sketch lifecycle ────────────────────────────────────────────────
 
 bool CadEngine::createSketch(const QString& name, int planeType)
@@ -212,11 +277,20 @@ bool CadEngine::createSketch(const QString& name, int planeType)
     if (!document_) {
         if (!newDocument("Untitled")) return false;
     }
+    // Close any sketch that's currently being edited. Without this, the
+    // old SketchFacade raw pointer keeps referencing the previous
+    // SketchObject and every draw call mutates the wrong sketch — which
+    // is why "create new sketch → circle/rectangle does nothing" in the
+    // user's datum-plane flow: the active sketch was still the first
+    // one, unclosed.
+    if (activeSketch_) closeSketch();
     activeSketch_ = document_->addSketch(name.toStdString(), planeType);
     if (activeSketch_) {
         static const char* planeNames[] = {"XY", "XZ", "YZ"};
         const char* pn = (planeType >= 0 && planeType <= 2) ? planeNames[planeType] : "XY";
         activeSketchName_ = name.toStdString();
+        // Remember plane so re-opening this sketch later can restore the view.
+        sketchPlanes_[activeSketchName_] = planeType;
         setStatus(QString("Sketch created: %1 (%2 plane)").arg(name, pn));
 
         // Clear 3D shapes during sketch editing — the QML SketchCanvas renders
@@ -239,6 +313,163 @@ bool CadEngine::createSketch(const QString& name, int planeType)
     return false;
 }
 
+bool CadEngine::createSketchOnFace(const QString& name,
+                                    const QString& featureName,
+                                    const QString& subElement)
+{
+    if (!document_) {
+        if (!newDocument("Untitled")) return false;
+    }
+    if (activeSketch_) closeSketch();
+    activeSketch_ = document_->addSketchOnFace(name.toStdString(),
+                                                featureName.toStdString(),
+                                                subElement.toStdString());
+    if (!activeSketch_) {
+        setStatus(QString("Sketch on face failed: %1/%2").arg(featureName, subElement));
+        return false;
+    }
+    activeSketchName_ = name.toStdString();
+    // No plane-index for face-attached sketches — leave out of sketchPlanes_
+    // so the re-open path falls back to Placement detection.
+    setStatus(QString("Sketch on %1/%2").arg(featureName, subElement));
+
+    // Same viewport cleanup as createSketch — hide 3D shapes while the 2D
+    // overlay is active.
+    if (viewport_) viewport_->clearShapes();
+
+    Q_EMIT featureTreeChanged();
+    Q_EMIT sketchChanged();
+    return true;
+}
+
+QString CadEngine::addDatumPlane(int basePlane, double offset, const QString& label)
+{
+    return addDatumPlaneRotated(basePlane, offset, 0.0, 0.0, label);
+}
+
+QString CadEngine::addDatumPlaneRotated(int basePlane, double offset,
+                                          double rotXDeg, double rotYDeg,
+                                          const QString& label)
+{
+    if (!document_) {
+        if (!newDocument("Untitled")) return {};
+    }
+    TxScope tx(this, "Add Datum Plane");
+    std::string name = document_->addDatumPlaneRotated(basePlane, offset,
+                                                        rotXDeg, rotYDeg,
+                                                        label.toStdString());
+    if (!name.empty()) {
+        setStatus(QString("Datum plane added: %1").arg(QString::fromStdString(name)));
+        Q_EMIT featureTreeChanged();
+    }
+    return QString::fromStdString(name);
+}
+
+QString CadEngine::addDatumPlaneOnFace(const QString& featureName,
+                                         const QString& faceName,
+                                         double offset,
+                                         const QString& label)
+{
+    if (!document_) return {};
+    TxScope tx(this, "Add Datum Plane (on face)");
+    std::string name = document_->addDatumPlaneOnFace(
+        featureName.toStdString(), faceName.toStdString(), offset,
+        label.toStdString());
+    if (!name.empty()) {
+        setStatus(QString("Datum plane on %1/%2").arg(featureName, faceName));
+        Q_EMIT featureTreeChanged();
+    }
+    return QString::fromStdString(name);
+}
+
+QVariantList CadEngine::availableSketchPlanes() const
+{
+    // Three base planes are always there; datum planes come from the
+    // document tree. Keeping them in a single list lets the sketch-plane
+    // picker render one scrollable list instead of two sections.
+    QVariantList out;
+    auto push = [&out](const QString& name, const QString& label, const QString& type) {
+        QVariantMap m;
+        m["name"] = name;
+        m["label"] = label;
+        m["type"] = type;
+        out.append(m);
+    };
+    push("__XY__", "XY Plane", "base");
+    push("__XZ__", "XZ Plane", "base");
+    push("__YZ__", "YZ Plane", "base");
+
+    if (!document_) return out;
+    for (const auto& f : document_->featureTree()) {
+        // PartDesign::Plane == datum plane authored by the user. App::Plane
+        // under Origin is already covered by the three base entries above.
+        if (f.typeName == "PartDesign::Plane") {
+            push(QString::fromStdString(f.name),
+                 QString::fromStdString(f.label.empty() ? f.name : f.label),
+                 "datum");
+        }
+    }
+    return out;
+}
+
+bool CadEngine::createSketchOnPlane(const QString& name, const QString& planeFeatureName)
+{
+    // Auto-create document if none exists — matches createSketch semantics.
+    // Without this the Create Sketch overlay on an empty workspace looked
+    // inert: the dialog opened, the user clicked XY, but we returned false
+    // before ever touching the document factory.
+    if (!document_) {
+        if (!newDocument("Untitled")) return false;
+    }
+    if (activeSketch_) closeSketch();
+
+    // Special sentinel values for the three base planes — route those to
+    // the simple index-based createSketch so Placement is set via rotation
+    // rather than attachment (same behaviour as before datum planes).
+    if (planeFeatureName == "__XY__") return createSketch(name, 0);
+    if (planeFeatureName == "__XZ__") return createSketch(name, 1);
+    if (planeFeatureName == "__YZ__") return createSketch(name, 2);
+
+    activeSketch_ = document_->addSketchOnPlane(name.toStdString(),
+                                                 planeFeatureName.toStdString());
+    if (!activeSketch_) {
+        setStatus(QString("Sketch on plane failed: %1").arg(planeFeatureName));
+        return false;
+    }
+    activeSketchName_ = name.toStdString();
+    setStatus(QString("Sketch on %1").arg(planeFeatureName));
+
+    // Mirror the base-plane flow: clear 3D shapes while editing 2D.
+    if (viewport_) viewport_->clearShapes();
+
+    Q_EMIT featureTreeChanged();
+    Q_EMIT sketchChanged();
+    return true;
+}
+
+QStringList CadEngine::featureFaces(const QString& featureName) const
+{
+    QStringList names;
+    if (!document_ || featureName.isEmpty()) return names;
+    for (const auto& s : document_->featureFaceNames(featureName.toStdString()))
+        names.append(QString::fromStdString(s));
+    return names;
+}
+
+QStringList CadEngine::solidFeatureNames() const
+{
+    QStringList names;
+    if (!document_) return names;
+    // Ordering matches featureTree (topological). Exclude sketches, bodies,
+    // and anything that doesn't host a solid.
+    for (const auto& f : document_->featureTree()) {
+        if (f.typeName.find("Sketcher::SketchObject") != std::string::npos) continue;
+        if (f.typeName.find("Body") != std::string::npos) continue;
+        names.append(QString::fromStdString(f.name));
+    }
+    return names;
+}
+
 bool CadEngine::openSketch(const QString& name)
 {
     if (!document_) return false;
@@ -249,6 +480,22 @@ bool CadEngine::openSketch(const QString& name)
 
         // Clear 3D shapes during sketch editing
         if (viewport_) viewport_->clearShapes();
+
+        // Orient camera to face the sketch plane (UX-004).
+        // Prefer the in-memory map (createSketch records it); fall back to
+        // placement detection for sketches loaded from disk.
+        if (viewport_) {
+            int plane = -1;
+            auto it = sketchPlanes_.find(activeSketchName_);
+            if (it != sketchPlanes_.end()) plane = it->second;
+            else                            plane = activeSketch_->planeType();
+            switch (plane) {
+                case 0: viewport_->viewTop();   break;
+                case 1: viewport_->viewFront(); break;
+                case 2: viewport_->viewRight(); break;
+                default: break;
+            }
+        }
 
         Q_EMIT sketchChanged();
         return true;
@@ -279,6 +526,7 @@ void CadEngine::closeSketch()
 int CadEngine::addLine(double x1, double y1, double x2, double y2)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Add Line");
     int id = activeSketch_->addLine({x1, y1}, {x2, y2});
     refreshSketch();
     return id;
@@ -287,6 +535,7 @@ int CadEngine::addLine(double x1, double y1, double x2, double y2)
 int CadEngine::addCircle(double cx, double cy, double radius)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Add Circle");
     int id = activeSketch_->addCircle({cx, cy}, radius);
     refreshSketch();
     return id;
@@ -296,7 +545,7 @@ int CadEngine::addArc(double cx, double cy, double radius,
                       double startAngle, double endAngle)
 {
     if (!activeSketch_) return -1;
-    // Convert degrees to radians for FreeCAD
+    TxScope tx(this, "Add Arc");
     double sa = startAngle * M_PI / 180.0;
     double ea = endAngle * M_PI / 180.0;
     int id = activeSketch_->addArc({cx, cy}, radius, sa, ea);
@@ -307,6 +556,7 @@ int CadEngine::addArc(double cx, double cy, double radius,
 int CadEngine::addRectangle(double x1, double y1, double x2, double y2)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Add Rectangle");
     int id = activeSketch_->addRectangle({x1, y1}, {x2, y2});
     refreshSketch();
     return id;
@@ -315,21 +565,16 @@ int CadEngine::addRectangle(double x1, double y1, double x2, double y2)
 int CadEngine::addPoint(double x, double y)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Add Point");
     int id = activeSketch_->addPoint({x, y});
     refreshSketch();
     return id;
 }
 
-void CadEngine::removeGeometry(int geoId)
-{
-    if (!activeSketch_) return;
-    activeSketch_->removeGeometry(geoId);
-    refreshSketch();
-}
-
 int CadEngine::addEllipse(double cx, double cy, double majorR, double minorR, double angleDeg)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Add Ellipse");
     double angleRad = angleDeg * M_PI / 180.0;
     int id = activeSketch_->addEllipse({cx, cy}, majorR, minorR, angleRad);
     refreshSketch();
@@ -339,6 +584,7 @@ int CadEngine::addEllipse(double cx, double cy, double majorR, double minorR, do
 int CadEngine::addBSpline(const QVariantList& points, int degree)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Add BSpline");
     std::vector<CADNC::Point2D> poles;
     for (const auto& pt : points) {
         auto map = pt.toMap();
@@ -352,6 +598,7 @@ int CadEngine::addBSpline(const QVariantList& points, int degree)
 int CadEngine::addPolyline(const QVariantList& points)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Add Polyline");
     std::vector<CADNC::Point2D> pts;
     for (const auto& pt : points) {
         auto map = pt.toMap();
@@ -365,6 +612,7 @@ int CadEngine::addPolyline(const QVariantList& points)
 int CadEngine::toggleConstruction(int geoId)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Toggle Construction");
     int result = activeSketch_->toggleConstruction(geoId);
     refreshSketch();
     return result;
@@ -375,6 +623,7 @@ int CadEngine::toggleConstruction(int geoId)
 int CadEngine::addDistanceConstraint(int geoId, double value)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Add Distance");
     int id = activeSketch_->addDistance(geoId, value);
     refreshSketch();
     return id;
@@ -383,6 +632,7 @@ int CadEngine::addDistanceConstraint(int geoId, double value)
 int CadEngine::addRadiusConstraint(int geoId, double value)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Add Radius");
     int id = activeSketch_->addRadius(geoId, value);
     refreshSketch();
     return id;
@@ -391,6 +641,7 @@ int CadEngine::addRadiusConstraint(int geoId, double value)
 int CadEngine::addHorizontalConstraint(int geoId)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Horizontal");
     int id = activeSketch_->addHorizontal(geoId);
     refreshSketch();
     return id;
@@ -399,6 +650,7 @@ int CadEngine::addHorizontalConstraint(int geoId)
 int CadEngine::addVerticalConstraint(int geoId)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Vertical");
     int id = activeSketch_->addVertical(geoId);
     refreshSketch();
     return id;
@@ -407,6 +659,7 @@ int CadEngine::addVerticalConstraint(int geoId)
 int CadEngine::addCoincidentConstraint(int geo1, int pos1, int geo2, int pos2)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Coincident");
     int id = activeSketch_->addCoincident(geo1, pos1, geo2, pos2);
     refreshSketch();
     return id;
@@ -415,6 +668,7 @@ int CadEngine::addCoincidentConstraint(int geo1, int pos1, int geo2, int pos2)
 int CadEngine::addAngleConstraint(int geo1, int geo2, double angleDeg)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Add Angle");
     double angleRad = angleDeg * M_PI / 180.0;
     int id = activeSketch_->addAngle(geo1, geo2, angleRad);
     refreshSketch();
@@ -424,6 +678,7 @@ int CadEngine::addAngleConstraint(int geo1, int geo2, double angleDeg)
 int CadEngine::addFixedConstraint(int geoId)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Fix");
     int id = activeSketch_->addFixed(geoId);
     refreshSketch();
     return id;
@@ -432,6 +687,7 @@ int CadEngine::addFixedConstraint(int geoId)
 int CadEngine::addDistanceXConstraint(int geoId, double value)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Add DistanceX");
     int id = activeSketch_->addConstraint(ConstraintType::DistanceX, geoId, -1, value);
     refreshSketch();
     return id;
@@ -440,6 +696,7 @@ int CadEngine::addDistanceXConstraint(int geoId, double value)
 int CadEngine::addDistanceYConstraint(int geoId, double value)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Add DistanceY");
     int id = activeSketch_->addConstraint(ConstraintType::DistanceY, geoId, -1, value);
     refreshSketch();
     return id;
@@ -448,6 +705,7 @@ int CadEngine::addDistanceYConstraint(int geoId, double value)
 int CadEngine::addDiameterConstraint(int geoId, double value)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Add Diameter");
     int id = activeSketch_->addConstraint(ConstraintType::Diameter, geoId, -1, value);
     refreshSketch();
     return id;
@@ -456,7 +714,11 @@ int CadEngine::addDiameterConstraint(int geoId, double value)
 int CadEngine::addSymmetricConstraint(int geo1, int pos1, int geo2, int pos2, int symGeo, int symPos)
 {
     if (!activeSketch_) return -1;
-    int id = activeSketch_->addConstraint(ConstraintType::Symmetric, geo1, geo2);
+    TxScope tx(this, "Symmetric");
+    // Delegates to SketchFacade::addSymmetric which sets all three elements +
+    // their PointPos values. Needed for "snap vertex to midpoint of a line"
+    // (FreeCAD auto-constraint path for midpoint snap).
+    int id = activeSketch_->addSymmetric(geo1, pos1, geo2, pos2, symGeo, symPos);
     refreshSketch();
     return id;
 }
@@ -464,7 +726,10 @@ int CadEngine::addSymmetricConstraint(int geo1, int pos1, int geo2, int pos2, in
 int CadEngine::addPointOnObjectConstraint(int pointGeo, int pointPos, int objectGeo)
 {
     if (!activeSketch_) return -1;
-    int id = activeSketch_->addConstraint(ConstraintType::PointOnObject, pointGeo, objectGeo);
+    TxScope tx(this, "Point on Object");
+    // Passing pointPos through is essential — Sketcher::PointOnObject needs
+    // (vertex_geo, vertex_pos) on element 0 and (curve_geo, none) on element 1.
+    int id = activeSketch_->addPointOnObject(pointGeo, pointPos, objectGeo);
     refreshSketch();
     return id;
 }
@@ -510,6 +775,7 @@ int CadEngine::addConstraintTwoGeo(const QString& type, int geoId)
 void CadEngine::removeConstraint(int constraintId)
 {
     if (!activeSketch_) return;
+    TxScope tx(this, "Delete Constraint");
     activeSketch_->removeConstraint(constraintId);
     refreshSketch();
 }
@@ -517,6 +783,7 @@ void CadEngine::removeConstraint(int constraintId)
 void CadEngine::setDatum(int constraintId, double value)
 {
     if (!activeSketch_) return;
+    TxScope tx(this, "Change Dimension");
     activeSketch_->setDatum(constraintId, value);
     refreshSketch();
 }
@@ -524,7 +791,16 @@ void CadEngine::setDatum(int constraintId, double value)
 void CadEngine::toggleDriving(int constraintId)
 {
     if (!activeSketch_) return;
+    TxScope tx(this, "Toggle Driving");
     activeSketch_->toggleDriving(constraintId);
+    refreshSketch();
+}
+
+void CadEngine::removeGeometry(int geoId)
+{
+    if (!activeSketch_) return;
+    TxScope tx(this, "Delete Geometry");
+    activeSketch_->removeGeometry(geoId);
     refreshSketch();
 }
 
@@ -533,6 +809,7 @@ void CadEngine::toggleDriving(int constraintId)
 int CadEngine::trimAtPoint(int geoId, double px, double py)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Trim");
     int id = activeSketch_->trim(geoId, {px, py});
     refreshSketch();
     return id;
@@ -541,6 +818,7 @@ int CadEngine::trimAtPoint(int geoId, double px, double py)
 int CadEngine::filletVertex(int geoId, int posId, double radius)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Fillet");
     int id = activeSketch_->fillet(geoId, posId, radius);
     refreshSketch();
     return id;
@@ -549,6 +827,7 @@ int CadEngine::filletVertex(int geoId, int posId, double radius)
 int CadEngine::chamferVertex(int geoId, int posId, double size)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Chamfer");
     int id = activeSketch_->chamfer(geoId, posId, size);
     refreshSketch();
     return id;
@@ -557,6 +836,7 @@ int CadEngine::chamferVertex(int geoId, int posId, double size)
 int CadEngine::extendGeo(int geoId, double increment, int endPointPos)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Extend");
     int id = activeSketch_->extend(geoId, increment, endPointPos);
     refreshSketch();
     return id;
@@ -565,6 +845,7 @@ int CadEngine::extendGeo(int geoId, double increment, int endPointPos)
 int CadEngine::splitAtPoint(int geoId, double px, double py)
 {
     if (!activeSketch_) return -1;
+    TxScope tx(this, "Split");
     int id = activeSketch_->split(geoId, {px, py});
     refreshSketch();
     return id;
@@ -582,6 +863,7 @@ QString CadEngine::pad(const QString& sketchName, double length)
     auto part = document_->partDesign();
     if (!part) return {};
 
+    TxScope tx(this, "Pad");
     std::string result = part->pad(sketchName.toStdString(), length);
     if (!result.empty()) {
         setStatus("Pad created: " + QString::fromStdString(result));
@@ -600,6 +882,7 @@ QString CadEngine::pocket(const QString& sketchName, double depth)
     auto part = document_->partDesign();
     if (!part) return {};
 
+    TxScope tx(this, "Pocket");
     std::string result = part->pocket(sketchName.toStdString(), depth);
     if (!result.empty()) {
         setStatus("Pocket created: " + QString::fromStdString(result));
@@ -618,6 +901,7 @@ QString CadEngine::revolution(const QString& sketchName, double angleDeg)
     auto part = document_->partDesign();
     if (!part) return {};
 
+    TxScope tx(this, "Revolution");
     std::string result = part->revolution(sketchName.toStdString(), angleDeg);
     if (!result.empty()) {
         setStatus("Revolution created: " + QString::fromStdString(result));
@@ -627,12 +911,176 @@ QString CadEngine::revolution(const QString& sketchName, double angleDeg)
     return QString::fromStdString(result);
 }
 
+QVariantMap CadEngine::getFeatureParams(const QString& featureName)
+{
+    QVariantMap m;
+    m["editable"] = false;
+    if (!document_ || featureName.isEmpty()) return m;
+    auto part = document_->partDesign();
+    if (!part) return m;
+
+    auto p = part->getFeatureParams(featureName.toStdString());
+    m["typeName"]   = QString::fromStdString(p.typeName);
+    m["sketchName"] = QString::fromStdString(p.sketchName);
+    m["length"]     = p.length;
+    m["length2"]    = p.length2;
+    m["angle"]      = p.angle;
+    m["reversed"]   = p.reversed;
+    m["editable"]   = p.editable;
+    m["sideType"]   = QString::fromStdString(p.sideType);
+    m["method"]     = QString::fromStdString(p.method);
+    return m;
+}
+
+namespace {
+PadOptions padOptsFromMap(const QVariantMap& m) {
+    PadOptions o;
+    if (m.contains("length"))   o.length   = m.value("length").toDouble();
+    if (m.contains("length2"))  o.length2  = m.value("length2").toDouble();
+    if (m.contains("reversed")) o.reversed = m.value("reversed").toBool();
+    if (m.contains("sideType")) o.sideType = m.value("sideType").toString().toStdString();
+    if (m.contains("method"))   o.method   = m.value("method").toString().toStdString();
+    return o;
+}
+} // namespace
+
+QString CadEngine::padEx(const QString& sketchName, const QVariantMap& opts)
+{
+    if (!document_) return {};
+    if (activeSketch_) closeSketch();
+    auto part = document_->partDesign();
+    if (!part) return {};
+    TxScope tx(this, "Pad");
+    std::string result = part->padEx(sketchName.toStdString(), padOptsFromMap(opts));
+    if (!result.empty()) {
+        setStatus("Pad created: " + QString::fromStdString(result));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return QString::fromStdString(result);
+}
+
+QString CadEngine::pocketEx(const QString& sketchName, const QVariantMap& opts)
+{
+    if (!document_) return {};
+    if (activeSketch_) closeSketch();
+    auto part = document_->partDesign();
+    if (!part) return {};
+    TxScope tx(this, "Pocket");
+    std::string result = part->pocketEx(sketchName.toStdString(), padOptsFromMap(opts));
+    if (!result.empty()) {
+        setStatus("Pocket created: " + QString::fromStdString(result));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return QString::fromStdString(result);
+}
+
+bool CadEngine::updatePadEx(const QString& featureName, const QVariantMap& opts)
+{
+    if (!document_) return false;
+    auto part = document_->partDesign();
+    if (!part) return false;
+    if (activeSketch_) closeSketch();
+    TxScope tx(this, "Update Pad");
+    bool ok = part->updatePadEx(featureName.toStdString(), padOptsFromMap(opts));
+    if (ok) {
+        setStatus(QString("Updated Pad: %1").arg(featureName));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return ok;
+}
+
+bool CadEngine::updatePocketEx(const QString& featureName, const QVariantMap& opts)
+{
+    if (!document_) return false;
+    auto part = document_->partDesign();
+    if (!part) return false;
+    if (activeSketch_) closeSketch();
+    TxScope tx(this, "Update Pocket");
+    bool ok = part->updatePocketEx(featureName.toStdString(), padOptsFromMap(opts));
+    if (ok) {
+        setStatus(QString("Updated Pocket: %1").arg(featureName));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return ok;
+}
+
+bool CadEngine::updatePad(const QString& featureName, double length, bool reversed)
+{
+    if (!document_) return false;
+    auto part = document_->partDesign();
+    if (!part) return false;
+    // Close active sketch first — its InternalShape may not be current, which
+    // would race the recompute triggered inside updatePad.
+    if (activeSketch_) closeSketch();
+    TxScope tx(this, "Update Pad");
+    bool ok = part->updatePad(featureName.toStdString(), length, reversed);
+    if (ok) {
+        setStatus(QString("Updated: %1 → %2 mm").arg(featureName).arg(length));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return ok;
+}
+
+bool CadEngine::updatePocket(const QString& featureName, double depth, bool reversed)
+{
+    if (!document_) return false;
+    auto part = document_->partDesign();
+    if (!part) return false;
+    if (activeSketch_) closeSketch();
+    TxScope tx(this, "Update Pocket");
+    bool ok = part->updatePocket(featureName.toStdString(), depth, reversed);
+    if (ok) {
+        setStatus(QString("Updated: %1 → %2 mm").arg(featureName).arg(depth));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return ok;
+}
+
+bool CadEngine::updateRevolution(const QString& featureName, double angleDeg)
+{
+    if (!document_) return false;
+    auto part = document_->partDesign();
+    if (!part) return false;
+    if (activeSketch_) closeSketch();
+    TxScope tx(this, "Update Revolution");
+    bool ok = part->updateRevolution(featureName.toStdString(), angleDeg);
+    if (ok) {
+        setStatus(QString("Updated: %1 → %2°").arg(featureName).arg(angleDeg));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return ok;
+}
+
+bool CadEngine::updateGroove(const QString& featureName, double angleDeg)
+{
+    if (!document_) return false;
+    auto part = document_->partDesign();
+    if (!part) return false;
+    if (activeSketch_) closeSketch();
+    TxScope tx(this, "Update Groove");
+    bool ok = part->updateGroove(featureName.toStdString(), angleDeg);
+    if (ok) {
+        setStatus(QString("Updated: %1 → %2°").arg(featureName).arg(angleDeg));
+        Q_EMIT featureTreeChanged();
+        updateViewportShapes();
+    }
+    return ok;
+}
+
 QString CadEngine::groove(const QString& sketchName, double angleDeg)
 {
     if (!document_) return {};
     if (activeSketch_) closeSketch();
     auto part = document_->partDesign();
     if (!part) return {};
+    TxScope tx(this, "Groove");
     std::string result = part->groove(sketchName.toStdString(), angleDeg);
     if (!result.empty()) {
         setStatus("Groove created: " + QString::fromStdString(result));
@@ -942,12 +1390,28 @@ QString CadEngine::solve()
     if (!activeSketch_) return "No sketch";
 
     auto result = activeSketch_->solve();
+    int dof = activeSketch_->dof();
     switch (result) {
-        case SolveResult::Solved:           solverStatus_ = "Fully Constrained"; break;
-        case SolveResult::UnderConstrained: solverStatus_ = "Under Constrained"; break;
+        case SolveResult::Solved:
+            solverStatus_ = "Fully Constrained";
+            break;
+        case SolveResult::UnderConstrained:
+            solverStatus_ = dof > 0
+                ? QString("Under Constrained (%1 DoF)").arg(dof)
+                : QString("Under Constrained");
+            break;
         case SolveResult::OverConstrained:  solverStatus_ = "Over Constrained"; break;
         case SolveResult::Conflicting:      solverStatus_ = "Conflicting"; break;
-        case SolveResult::Redundant:        solverStatus_ = "Redundant"; break;
+        case SolveResult::Redundant:
+            // Redundant means the sketch has extra constraints that don't
+            // add information — it's still fully solved. User feedback:
+            // the geometry should stay green; only a small warning badge
+            // should hint at redundancy. We surface both signals via the
+            // status string so drawGeometry can keep green when DoF=0.
+            solverStatus_ = dof == 0
+                ? "Fully Constrained (Redundant)"
+                : "Redundant";
+            break;
         case SolveResult::SolverError:      solverStatus_ = "Solver Error"; break;
     }
     Q_EMIT sketchChanged();
@@ -966,6 +1430,7 @@ QVariantList CadEngine::featureTree() const
         item["name"] = QString::fromStdString(f.name);
         item["label"] = QString::fromStdString(f.label);
         item["typeName"] = QString::fromStdString(f.typeName);
+        item["parent"] = QString::fromStdString(f.parent);
         list.append(item);
     }
     return list;
@@ -1064,7 +1529,41 @@ bool CadEngine::canRedo() const
 
 bool CadEngine::hasDocument() const { return document_ != nullptr; }
 QString CadEngine::documentPath() const { return documentPath_; }
-QString CadEngine::documentName() const { return document_ ? QString::fromStdString(document_->name()) : ""; }
+QString CadEngine::documentName() const
+{
+    if (!document_) return {};
+    // Prefer the user-editable Label over the internal name so renames
+    // surface in the UI. Fall back to the internal name for fresh docs.
+    if (auto* doc = static_cast<App::Document*>(document_->internalDoc())) {
+        std::string lbl = doc->Label.getStrValue();
+        if (!lbl.empty()) return QString::fromStdString(lbl);
+    }
+    return QString::fromStdString(document_->name());
+}
+
+void CadEngine::setGridSpacing(double mm)
+{
+    // BUG-009: clamp to 0.5mm minimum so the adaptive extent in OccRenderer
+    // (step*100) doesn't collapse to a few millimetres of visible area.
+    if (mm < 0.5) mm = 0.5;
+    if (mm > 1000.0) mm = 1000.0;
+    if (std::abs(mm - gridSpacing_) < 1e-9) return;
+
+    gridSpacing_ = mm;
+    // Propagate to the 3D viewport — OccViewport queues the change to the
+    // render thread so the OCCT grid updates without tearing.
+    if (viewport_) viewport_->setGridStep(mm);
+    Q_EMIT gridSpacingChanged();
+    setStatus(QString("Grid: %1 mm").arg(mm));
+}
+
+void CadEngine::setGridVisible(bool on)
+{
+    if (gridVisible_ == on) return;
+    gridVisible_ = on;
+    if (viewport_) viewport_->setGridVisible(on);
+    Q_EMIT gridVisibleChanged();
+}
 
 QStringList CadEngine::sketchNames() const
 {
@@ -1159,6 +1658,11 @@ void CadEngine::updateViewportShapes()
                     || f.typeName.find("PolarPattern") != std::string::npos
                     || f.typeName.find("Mirrored") != std::string::npos;
         if (isSolid && f.name != tipName) continue;
+
+        // UX-017: honour the feature's Visibility property. The tree's
+        // "Toggle Visibility" menu flips it; we skip invisible features
+        // entirely so the viewport reflects the user's intent.
+        if (!document_->isVisible(f.name)) continue;
 
         void* featurePtr = document_->getFeatureShape(f.name);
         if (!featurePtr) continue;

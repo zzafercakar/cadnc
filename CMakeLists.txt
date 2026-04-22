@@ -124,6 +124,23 @@ configure_file(
     @ONLY
 )
 
+# ── Auto-incrementing build number (UX-018) ─────────────────────────────
+# Runs cmake/BumpBuildNumber.cmake on every build: reads build/.build_number,
+# increments it, and rewrites generated/AppVersion.h as "${PROJECT_VERSION}.N".
+# The header above (configure-time) seeds a baseline; this target overwrites
+# it pre-build when the number changes. Cadnc main.cpp already picks up the
+# new CADNC_APP_VERSION via its AppVersion.h include.
+add_custom_target(cadnc_bump_build_number ALL
+    COMMAND ${CMAKE_COMMAND}
+        -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -DBINARY_DIR=${CMAKE_BINARY_DIR}
+        -DBASE_VERSION=${PROJECT_VERSION}
+        -P ${CMAKE_SOURCE_DIR}/cmake/BumpBuildNumber.cmake
+    BYPRODUCTS ${CMAKE_BINARY_DIR}/generated/AppVersion.h
+    COMMENT "CADNC: bumping build number"
+    VERBATIM
+)
+
 file(GLOB ADAPTER_HEADERS CONFIGURE_DEPENDS adapter/inc/*.h)
 file(GLOB ADAPTER_SOURCES CONFIGURE_DEPENDS adapter/src/*.cpp)
 file(GLOB CAM_HEADERS CONFIGURE_DEPENDS cam/inc/*.h)
@@ -152,6 +169,8 @@ file(GLOB ICON_FILES CONFIGURE_DEPENDS
     resources/icons/nesting/*.svg
     resources/icons/sketch/*.svg
     resources/icons/quickaccess/*.svg
+    resources/logos/*.svg
+    resources/logos/*.png
 )
 
 add_executable(cadnc
@@ -168,6 +187,12 @@ add_executable(cadnc
 )
 
 set_target_properties(cadnc PROPERTIES OUTPUT_NAME cadnc)
+
+# Ensure the build number is bumped before main.cpp's object is linked so the
+# new CADNC_APP_VERSION ends up in the binary.
+add_dependencies(cadnc cadnc_bump_build_number)
+set_property(SOURCE ${CMAKE_SOURCE_DIR}/app/main.cpp
+    APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/generated/AppVersion.h)
 
 target_include_directories(cadnc PRIVATE
     "${CMAKE_BINARY_DIR}/generated"

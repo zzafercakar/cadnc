@@ -123,6 +123,14 @@ public:
     int addVertical(int geoId);
     int addFixed(int geoId);
 
+    /// Point-on-curve (posId for the point — 1/2/3, curve side is edge with PointPos::none)
+    int addPointOnObject(int pointGeo, int pointPos, int curveGeo);
+
+    /// Symmetric constraint with 3 elements:
+    ///   Symmetric(g1.pos1, g2.pos2, g3.pos3) — g3 sits on the symmetry axis of g1↔g2.
+    /// Used for "snap vertex to midpoint of a line" (line.start, line.end, vertex.mid).
+    int addSymmetric(int g1, int pos1, int g2, int pos2, int g3, int pos3);
+
     void removeConstraint(int constraintId);
     void setDatum(int constraintId, double value);
     void toggleDriving(int constraintId);
@@ -139,6 +147,11 @@ public:
 
     // ── Solver ──────────────────────────────────────────────────────
     SolveResult solve();
+    /// Degrees of freedom remaining after the last solve. 0 means the
+    /// sketch is fully constrained; >0 means under-constrained. Returns
+    /// -1 if the query fails. Used by the UI to colour geometry blue
+    /// (DOF>0) vs. green (DOF=0).
+    int dof() const;
 
     // ── Query ───────────────────────────────────────────────────────
     std::vector<GeoInfo> geometry() const;
@@ -149,6 +162,10 @@ public:
     // ── Lifecycle ───────────────────────────────────────────────────
     /// Close the sketch (validates, updates shape)
     void close();
+
+    /// Returns 0=XY, 1=XZ, 2=YZ based on the sketch's stored Placement.
+    /// -1 if the sketch is not on a standard plane.
+    int planeType() const;
 
 private:
     struct Impl;

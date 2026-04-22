@@ -24,6 +24,9 @@ ApplicationWindow {
     property int    currentWorkbench: 0    // 0=Part, 1=Sketch, 2=CAM, 3=Nesting
     property string currentStatus:   qsTr("Ready")
     property string activeDrawTool:  ""
+    // When non-empty, the left panel becomes a SolidWorks-style FeatureEditPanel
+    // ("pad" | "pocket" | "revolve" | "groove"). Live-previews the feature.
+    property string featureEditMode: ""
 
     readonly property var workbenchNames:  [qsTr("Part"), qsTr("Sketch"), qsTr("CAM"), qsTr("Nesting")]
     readonly property var workbenchColors: [Theme.wbPart, Theme.wbSketch, Theme.wbCam, Theme.wbNesting]
@@ -36,7 +39,7 @@ ApplicationWindow {
 
     // ─── Shortcuts ─────────────────────────────────────────────────
     Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut
-               onActivated: { activeDrawTool = ""; sketchCanvas.drawing = false } }
+               onActivated: { activeDrawTool = ""; sketchCanvas.drawing = false; sketchCanvas.cancelDimension() } }
     Shortcut { sequence: "Delete"; context: Qt.ApplicationShortcut
                onActivated: { if (cadEngine.sketchActive && sketchCanvas.selectedGeo >= 0) cadEngine.removeGeometry(sketchCanvas.selectedGeo) } }
     Shortcut { sequence: "L"; onActivated: if (cadEngine.sketchActive) activeDrawTool = "line" }
@@ -48,9 +51,11 @@ ApplicationWindow {
     Shortcut { sequence: "S"; onActivated: if (cadEngine.sketchActive) activeDrawTool = "bspline" }
     Shortcut { sequence: "X"; onActivated: if (cadEngine.sketchActive) activeDrawTool = "extend" }
     Shortcut { sequence: "W"; onActivated: if (cadEngine.sketchActive) activeDrawTool = "split" }
+    Shortcut { sequence: "T"; onActivated: if (cadEngine.sketchActive) activeDrawTool = "trim" }
+    Shortcut { sequence: "F"; onActivated: if (cadEngine.sketchActive) activeDrawTool = "fillet" }
     Shortcut { sequence: "G"; onActivated: if (cadEngine.sketchActive && sketchCanvas.selectedGeo >= 0) cadEngine.toggleConstruction(sketchCanvas.selectedGeo) }
     Shortcut { sequence: "H"; onActivated: if (cadEngine.sketchActive && sketchCanvas.selectedGeo >= 0) cadEngine.addHorizontalConstraint(sketchCanvas.selectedGeo) }
-    Shortcut { sequence: "D"; onActivated: if (cadEngine.sketchActive && sketchCanvas.selectedGeo >= 0) { dimInput.targetGeoId = sketchCanvas.selectedGeo; dimInput.open() } }
+    Shortcut { sequence: "D"; onActivated: if (cadEngine.sketchActive) activeDrawTool = "dimension" }
 
     // ─── Menu Bar ──────────────────────────────────────────────────
     menuBar: MenuBar {
@@ -171,6 +176,12 @@ ApplicationWindow {
                 QAButton { iconName: "new";  tip: qsTr("New (Ctrl+N)");  onClicked: requestNew() }
                 QAButton { iconName: "save"; tip: qsTr("Save (Ctrl+S)"); onClicked: saveDialog.open() }
                 QASep {}
+                // Always-available "New Sketch" button — user asked for
+                // a permanent entry point in the top toolbar in addition
+                // to the tree's pencil button.
+                QAButton { iconName: "sketch"; tip: qsTr("New Sketch");
+                           onClicked: sketchPlaneDialog.open() }
+                QASep {}
                 QAButton { iconName: "undo"; tip: qsTr("Undo (Ctrl+Z)"); opacity: cadEngine.canUndo ? 1.0 : 0.4; onClicked: cadEngine.undo() }
                 QAButton { iconName: "redo"; tip: qsTr("Redo (Ctrl+Y)"); opacity: cadEngine.canRedo ? 1.0 : 0.4; onClicked: cadEngine.redo() }
                 QASep {}
@@ -201,10 +212,34 @@ ApplicationWindow {
 
                 QASep {}
 
-                // Brand
+                // Brand — SMB logo + product name/version
                 RowLayout {
                     Layout.alignment: Qt.AlignVCenter
                     Layout.rightMargin: 10; spacing: 8
+
+                    Image {
+                        // Original SMB logo (440x436 PNG from MilCAD). At
+                        // a 32px render target with mipmap the result
+                        // looked washed out; we now:
+                        //   - bump the display to 40px so fine strokes
+                        //     (the swirl blades) still resolve,
+                        //   - pre-render at 2x the display size via
+                        //     sourceSize so the downsample happens once
+                        //     at load time, not every paint,
+                        //   - disable mipmap (which would linear-blur
+                        //     further) and rely on `smooth` for the
+                        //     single high-quality downsample.
+                        id: smbLogo
+                        source: "qrc:/resources/logos/smb_logo.png"
+                        Layout.preferredWidth: 40
+                        Layout.preferredHeight: 40
+                        Layout.alignment: Qt.AlignVCenter
+                        sourceSize: Qt.size(80, 80)
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
+                        mipmap: false
+                        asynchronous: false
+                    }
 
                     Column {
                         Layout.alignment: Qt.AlignVCenter; spacing: 1
@@ -345,13 +380,17 @@ ApplicationWindow {
                     if (!cadEngine.hasDocument) cadEngine.newDocument("Untitled")
                     sketchPlaneDialog.open()
                 } else if (action === "pad") {
-                    padDialog.open()
+                    if (cadEngine.sketchNames.length === 0) { padDialog.open(); return }
+                    mainWindow.featureEditMode = "pad"
                 } else if (action === "pocket") {
-                    pocketDialog.open()
+                    if (cadEngine.sketchNames.length === 0) { pocketDialog.open(); return }
+                    mainWindow.featureEditMode = "pocket"
                 } else if (action === "revolve") {
-                    revolveDialog.open()
+                    if (cadEngine.sketchNames.length === 0) { revolveDialog.open(); return }
+                    mainWindow.featureEditMode = "revolve"
                 } else if (action === "groove") {
-                    grooveDialog.open()
+                    if (cadEngine.sketchNames.length === 0) { grooveDialog.open(); return }
+                    mainWindow.featureEditMode = "groove"
                 } else if (action === "box") {
                     boxDialog.primitiveType = "box"; boxDialog.open()
                 } else if (action === "cylinder") {
@@ -459,10 +498,62 @@ ApplicationWindow {
         anchors.fill: parent
         spacing: 0
 
-        // Left panel — Model Tree
-        ModelTreePanel {
-            Layout.preferredWidth: Theme.panelW; Layout.minimumWidth: Theme.panelMinW; Layout.fillHeight: true
-            onSketchDoubleClicked: function(name) { cadEngine.openSketch(name); mainWindow.currentWorkbench = 1 }
+        // Left panel — model tree, OR feature edit panel during pad/pocket/etc.
+        Item {
+            Layout.preferredWidth: Theme.panelW
+            Layout.minimumWidth: Theme.panelMinW
+            Layout.fillHeight: true
+
+            ModelTreePanel {
+                anchors.fill: parent
+                visible: mainWindow.featureEditMode === "" && featureEditPanel.editingFeatureName === ""
+                onSketchDoubleClicked: function(name) { cadEngine.openSketch(name); mainWindow.currentWorkbench = 1 }
+                onFeatureEditRequested: function(name, typeName) {
+                    // Map PartDesign type → FeatureEditPanel featureType key.
+                    // openForEdit() drives visibility via its editingFeatureName
+                    // property — we do NOT flip featureEditMode (that is the
+                    // create-new flow and would stomp the edit state).
+                    var key = typeName.indexOf("Pad") >= 0      ? "pad"
+                            : typeName.indexOf("Pocket") >= 0   ? "pocket"
+                            : typeName.indexOf("Revolution") >= 0 ? "revolve"
+                            : typeName.indexOf("Groove") >= 0   ? "groove"
+                            : ""
+                    if (key !== "") featureEditPanel.openForEdit(key, name)
+                }
+                // UX-016: double-click a datum plane under Origin to start a
+                // sketch on it. `planeType` is the 0/1/2 index expected by
+                // CadEngine::createSketch (XY/XZ/YZ respectively).
+                onPlaneDoubleClicked: function(name, planeType) {
+                    cadEngine.createSketch("Sketch", planeType)
+                    mainWindow.currentWorkbench = 1
+                }
+                // Header button + context menu "New Sketch"
+                onNewSketchRequested: sketchPlaneDialog.open()
+                // Right-click → "Add Datum Plane…" — opens the dialog
+                onNewDatumPlaneRequested: datumPlaneDialog.open()
+            }
+
+            FeatureEditPanel {
+                id: featureEditPanel
+                anchors.fill: parent
+                // Visible for either the create flow (driven by featureEditMode)
+                // or the edit flow (driven by editingFeatureName).
+                visible: mainWindow.featureEditMode !== "" || featureEditPanel.editingFeatureName !== ""
+                onAccepted: { mainWindow.featureEditMode = "" }
+                onCancelled: { mainWindow.featureEditMode = "" }
+            }
+
+            // Open the panel in create mode whenever featureEditMode becomes
+            // non-empty. The guard avoids re-opening create mode over an active
+            // edit session.
+            Connections {
+                target: mainWindow
+                function onFeatureEditModeChanged() {
+                    if (mainWindow.featureEditMode !== "" &&
+                        featureEditPanel.editingFeatureName === "")
+                        featureEditPanel.openFor(mainWindow.featureEditMode)
+                }
+            }
         }
 
         // Center — viewport / sketch canvas
@@ -558,7 +649,45 @@ ApplicationWindow {
                     }
 
                     StatusToggle { text: "SNAP"; isOn: sketchCanvas.snapEnabled; onToggled: sketchCanvas.snapEnabled = !sketchCanvas.snapEnabled }
-                    StatusToggle { text: "GRID"; isOn: sketchCanvas.gridVisible; onToggled: sketchCanvas.gridVisible = !sketchCanvas.gridVisible }
+                    // GRID toggle now drives CadEngine's single source of truth,
+                    // which fans out to both the sketch canvas and the 3D OCCT
+                    // viewer grid (BUG-013).
+                    StatusToggle { text: "GRID"; isOn: cadEngine.gridVisible; onToggled: cadEngine.gridVisible = !cadEngine.gridVisible }
+                    // Inline grid size input (UX-012) — editable next to GRID.
+                    // Only shown when grid is on to avoid a phantom input.
+                    Rectangle {
+                        visible: cadEngine.gridVisible
+                        Layout.preferredWidth: gridStepField.implicitWidth + 24
+                        Layout.preferredHeight: 18
+                        radius: 4
+                        color: gridStepField.activeFocus ? Theme.panelAlt : "transparent"
+                        border.width: 1
+                        border.color: gridStepField.activeFocus ? Theme.accent : Theme.borderLight
+                        Row {
+                            anchors.centerIn: parent; spacing: 2
+                            TextField {
+                                id: gridStepField
+                                width: 44
+                                height: 16
+                                padding: 0
+                                font.pixelSize: 10; font.family: Theme.fontMono
+                                horizontalAlignment: Text.AlignRight
+                                selectByMouse: true
+                                text: cadEngine.gridSpacing.toFixed(cadEngine.gridSpacing < 10 ? 1 : 0)
+                                validator: DoubleValidator { bottom: 0.5; top: 1000.0; decimals: 2 }
+                                background: Item {}
+                                onEditingFinished: {
+                                    var v = parseFloat(text)
+                                    if (!isNaN(v)) cadEngine.gridSpacing = v
+                                }
+                            }
+                            Text {
+                                text: "mm"
+                                font.pixelSize: 9; color: Theme.textTer
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+                    }
                     StatusToggle { text: "ORTHO" }
 
                     // Cursor XY
@@ -653,27 +782,35 @@ ApplicationWindow {
     }
 
     // ─── File Dialogs ──────────────────────────────────────────────
+    // User-visible filter labels avoid product branding ("FreeCAD
+    // project") per user feedback — the ".cadnc" extension is just the
+    // FCStd binary written under a neutral name so a brand-agnostic CAD
+    // label makes the format ladder read cleanly.
     FileDialog {
         id: openDialog
         title: "Open File"
         nameFilters: [
-            "All supported (*.FCStd *.step *.stp *.iges *.igs *.brep *.stl)",
-            "FreeCAD project (*.FCStd)",
+            "All supported (*.cadnc *.FCStd *.step *.stp *.iges *.igs *.igus *.brep *.stl *.dxf *.dwg *.obj *.ply)",
+            "CADNC project (*.cadnc *.FCStd)",
             "STEP (*.step *.stp)",
-            "IGES (*.iges *.igs)",
+            "IGES (*.iges *.igs *.igus)",
             "BREP (*.brep)",
             "STL (*.stl)",
+            "DXF / DWG (*.dxf *.dwg)",
+            "OBJ (*.obj)",
+            "PLY (*.ply)",
             "All files (*)"
         ]
         fileMode: FileDialog.OpenFile
         onAccepted: {
             var path = selectedFile.toString().replace("file://", "")
             var ext = path.split(".").pop().toLowerCase()
-            if (ext === "fcstd") {
+            // Native project formats go through openDocument; everything
+            // else imports shapes into the current doc.
+            if (ext === "fcstd" || ext === "cadnc") {
                 if (cadEngine.openDocument(path))
                     mainWindow.title = "CADNC v" + appVersion + " — " + path.split("/").pop()
             } else {
-                // STEP/IGES/BREP/STL → import geometry
                 if (cadEngine.importFile(path))
                     mainWindow.title = "CADNC v" + appVersion + " — " + path.split("/").pop()
             }
@@ -683,13 +820,29 @@ ApplicationWindow {
     FileDialog {
         id: saveDialog
         title: "Save As"
-        nameFilters: ["FreeCAD project (*.FCStd)", "All files (*)"]
+        nameFilters: [
+            "CADNC project (*.cadnc *.FCStd)",
+            "STEP (*.step *.stp)",
+            "IGES (*.iges *.igs *.igus)",
+            "BREP (*.brep)",
+            "STL (*.stl)",
+            "DXF (*.dxf)",
+            "OBJ (*.obj)",
+            "All files (*)"
+        ]
         fileMode: FileDialog.SaveFile
         onAccepted: {
             var path = selectedFile.toString().replace("file://", "")
-            if (cadEngine.saveDocumentAs(path)) {
-                mainWindow.title = "CADNC v" + appVersion + " — " + path.split("/").pop()
+            var ext = path.split(".").pop().toLowerCase()
+            // Native vs geometry-only export routes. If the user typed a
+            // name without an extension, default to .cadnc.
+            if (ext === path.toLowerCase()) {
+                path += ".cadnc"; ext = "cadnc"
             }
+            var ok = (ext === "fcstd" || ext === "cadnc")
+                   ? cadEngine.saveDocumentAs(path)
+                   : cadEngine.exportDocument(path)
+            if (ok) mainWindow.title = "CADNC v" + appVersion + " — " + path.split("/").pop()
         }
     }
 
@@ -698,9 +851,12 @@ ApplicationWindow {
         title: "Export"
         nameFilters: [
             "STEP (*.step *.stp)",
-            "IGES (*.iges *.igs)",
+            "IGES (*.iges *.igs *.igus)",
             "STL (*.stl)",
-            "BREP (*.brep)"
+            "BREP (*.brep)",
+            "DXF (*.dxf)",
+            "OBJ (*.obj)",
+            "All files (*)"
         ]
         fileMode: FileDialog.SaveFile
         onAccepted: {
@@ -867,9 +1023,26 @@ ApplicationWindow {
     Popup {
         id: sketchPlaneDialog
         modal: true; focus: true; padding: 0
-        width: 300; height: spCol.implicitHeight + 24
+        width: 320; height: spCol.implicitHeight + 24
         x: (mainWindow.width - width) / 2; y: (mainWindow.height - height) / 2
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        // Refresh face list whenever the dialog opens in case features changed
+        onOpened: {
+            faceFeatureCombo.currentIndex =
+                cadEngine.solidFeatureNames && cadEngine.solidFeatureNames().length > 0 ? 0 : -1
+            refreshFaceList()
+        }
+
+        function refreshFaceList() {
+            var feats = cadEngine.solidFeatureNames()
+            if (faceFeatureCombo.currentIndex < 0 || feats.length === 0) {
+                faceCombo.model = []
+                return
+            }
+            faceCombo.model = cadEngine.featureFaces(feats[faceFeatureCombo.currentIndex])
+            faceCombo.currentIndex = faceCombo.model.length > 0 ? 0 : -1
+        }
 
         background: Rectangle {
             radius: Theme.radiusLg; color: Theme.panel
@@ -882,7 +1055,7 @@ ApplicationWindow {
 
             // Title bar
             Rectangle {
-                width: 300; height: 40; radius: Theme.radiusLg; color: Theme.wbSketch
+                width: 320; height: 40; radius: Theme.radiusLg; color: Theme.wbSketch
                 Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 12; color: parent.color }
                 Text { anchors.centerIn: parent; text: qsTr("Select Sketch Plane"); color: "#FFFFFF"; font.pixelSize: 14; font.bold: true }
             }
@@ -892,16 +1065,34 @@ ApplicationWindow {
 
                 Text { text: qsTr("Choose the plane to sketch on:"); color: Theme.textSec; font.pixelSize: 12; bottomPadding: 4 }
 
+                // Combined plane list — three base planes + every user-
+                // authored PartDesign::Plane in the tree. cadEngine.
+                // availableSketchPlanes() returns both in a single list so
+                // the user's datum planes show up next to XY/XZ/YZ.
                 Repeater {
-                    model: [
-                        { label: "XY Plane", desc: qsTr("Top view (Z up)"),   plane: 0, color: "#2563EB" },
-                        { label: "XZ Plane", desc: qsTr("Front view (Y up)"), plane: 1, color: "#16A34A" },
-                        { label: "YZ Plane", desc: qsTr("Side view (X up)"),  plane: 2, color: "#DC2626" }
-                    ]
+                    model: {
+                        // Refresh each time the dialog opens. Base entries
+                        // get axis colors; datums get amber.
+                        var base = cadEngine.availableSketchPlanes()
+                        var enriched = []
+                        for (var i = 0; i < base.length; i++) {
+                            var e = base[i]
+                            var colour, desc
+                            if (e.name === "__XY__") { colour = "#DC2626"; desc = qsTr("Top view (Z up)") }
+                            else if (e.name === "__XZ__") { colour = "#16A34A"; desc = qsTr("Front view (Y up)") }
+                            else if (e.name === "__YZ__") { colour = "#2563EB"; desc = qsTr("Side view (X up)") }
+                            else { colour = "#F59E0B"; desc = qsTr("Custom datum plane") }
+                            enriched.push({
+                                name: e.name, label: e.label,
+                                desc: desc, color: colour, type: e.type
+                            })
+                        }
+                        return enriched
+                    }
                     delegate: Rectangle {
                         required property var modelData
                         required property int index
-                        width: 272; height: 44; radius: Theme.radiusSm
+                        width: 292; height: 44; radius: Theme.radiusSm
                         color: spArea.containsMouse ? Theme.hover : Theme.surfaceAlt
                         border.color: spArea.containsMouse ? modelData.color : Theme.borderLight
                         border.width: spArea.containsMouse ? 2 : 1
@@ -909,7 +1100,6 @@ ApplicationWindow {
                         Row {
                             anchors.fill: parent; anchors.leftMargin: 10; spacing: 8
 
-                            // Color accent bar
                             Rectangle {
                                 width: 4; height: 24; radius: 2; color: modelData.color
                                 anchors.verticalCenter: parent.verticalCenter
@@ -926,9 +1116,275 @@ ApplicationWindow {
                             id: spArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 sketchPlaneDialog.close()
-                                cadEngine.createSketch("Sketch", modelData.plane)
+                                cadEngine.createSketchOnPlane("Sketch", modelData.name)
                                 mainWindow.currentWorkbench = 1
                             }
+                        }
+                    }
+                }
+
+                // ── Divider ──────────────────────────────────────────
+                Rectangle {
+                    visible: cadEngine.solidFeatureNames().length > 0
+                    width: 292; height: 1; color: Theme.divider
+                    anchors.horizontalCenter: parent.horizontalCenter
+                }
+
+                // ── On Face section ──────────────────────────────────
+                // Only shown once a solid exists — lets the user attach a new
+                // sketch to an existing face. FreeCAD AttachExtension handles
+                // the placement calculation automatically on recompute.
+                Column {
+                    visible: cadEngine.solidFeatureNames().length > 0
+                    spacing: 4; width: 292
+
+                    Text { text: qsTr("Or sketch on an existing face:")
+                           color: Theme.textSec; font.pixelSize: 12; topPadding: 4 }
+
+                    Row {
+                        spacing: 6; width: parent.width
+                        ComboBox {
+                            id: faceFeatureCombo
+                            width: 150
+                            model: cadEngine.solidFeatureNames()
+                            onActivated: sketchPlaneDialog.refreshFaceList()
+                        }
+                        ComboBox {
+                            id: faceCombo
+                            width: 130
+                        }
+                    }
+
+                    Rectangle {
+                        width: parent.width; height: 36; radius: Theme.radiusSm
+                        color: Theme.wbSketch
+                        opacity: (faceFeatureCombo.currentIndex >= 0 && faceCombo.currentIndex >= 0) ? 1.0 : 0.5
+                        Text {
+                            anchors.centerIn: parent
+                            text: qsTr("Sketch on Face")
+                            color: "white"; font.pixelSize: 12; font.bold: true
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            enabled: faceFeatureCombo.currentIndex >= 0 && faceCombo.currentIndex >= 0
+                            onClicked: {
+                                var feats = cadEngine.solidFeatureNames()
+                                var fname = feats[faceFeatureCombo.currentIndex]
+                                var fsub  = faceCombo.model[faceCombo.currentIndex]
+                                sketchPlaneDialog.close()
+                                if (cadEngine.createSketchOnFace("Sketch", fname, fsub))
+                                    mainWindow.currentWorkbench = 1
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ─── Datum Plane dialog ────────────────────────────────────────
+    // Two modes: (a) base plane + offset + optional tilt,
+    //            (b) face of an existing solid + offset.
+    // Switched via tab-style radio. Every input triggers the parametric
+    // setValue so the preview happens live — closing Apply just stops
+    // further edits.
+    Popup {
+        id: datumPlaneDialog
+        modal: true; focus: true; padding: 0
+        width: 360; height: dpCol.implicitHeight + 24
+        x: (mainWindow.width - width) / 2; y: (mainWindow.height - height) / 2
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        property string mode: "base"     // "base" | "face"
+        property int baseIdx: 0          // 0=XY 1=XZ 2=YZ
+        property double offsetMm: 10.0
+        property double rotXDeg: 0.0
+        property double rotYDeg: 0.0
+        property string faceFeature: ""
+        property string faceSub: ""
+
+        onOpened: {
+            // Refresh solid feature combo in case features changed.
+            var feats = cadEngine.solidFeatureNames()
+            dpFeatureCombo.model = feats
+            dpFeatureCombo.currentIndex = feats.length > 0 ? 0 : -1
+            dpRefreshFaces()
+        }
+
+        function dpRefreshFaces() {
+            if (dpFeatureCombo.currentIndex < 0) {
+                dpFaceCombo.model = []
+                return
+            }
+            var feats = dpFeatureCombo.model
+            dpFaceCombo.model = cadEngine.featureFaces(feats[dpFeatureCombo.currentIndex])
+            dpFaceCombo.currentIndex = dpFaceCombo.model.length > 0 ? 0 : -1
+        }
+
+        background: Rectangle {
+            radius: Theme.radiusLg; color: Theme.panel
+            border.color: Theme.wbPart; border.width: 2
+            Rectangle { anchors.fill: parent; anchors.margins: -4; z: -1; radius: 16; color: Theme.shadow }
+        }
+
+        contentItem: Column {
+            id: dpCol; spacing: 0; padding: 0
+            Rectangle {
+                width: 360; height: 40; radius: Theme.radiusLg; color: Theme.wbPart
+                Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 12; color: parent.color }
+                Text { anchors.centerIn: parent; text: qsTr("New Datum Plane"); color: "#FFFFFF"; font.pixelSize: 14; font.bold: true }
+            }
+            Column {
+                spacing: 8; topPadding: 12; bottomPadding: 12; leftPadding: 14; rightPadding: 14
+                width: 360
+
+                // Mode tab selector
+                Row {
+                    spacing: 6; width: 332
+                    Repeater {
+                        model: [
+                            { key: "base", label: qsTr("Base plane") },
+                            { key: "face", label: qsTr("On face") }
+                        ]
+                        delegate: Rectangle {
+                            required property var modelData
+                            width: 163; height: 28; radius: 4
+                            color: datumPlaneDialog.mode === modelData.key
+                                   ? Theme.wbPart : Theme.surfaceAlt
+                            border.color: datumPlaneDialog.mode === modelData.key
+                                   ? Theme.wbPart : Theme.border
+                            border.width: 1
+                            Text {
+                                anchors.centerIn: parent
+                                text: modelData.label
+                                font.pixelSize: 11; font.bold: true
+                                color: datumPlaneDialog.mode === modelData.key
+                                       ? "white" : Theme.text
+                            }
+                            MouseArea {
+                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: datumPlaneDialog.mode = modelData.key
+                            }
+                        }
+                    }
+                }
+
+                // ── Base plane mode ────────────────────────────────
+                Column {
+                    visible: datumPlaneDialog.mode === "base"
+                    spacing: 8; width: 332
+                    Text { text: qsTr("Reference plane:"); font.pixelSize: 11; color: Theme.textSec }
+                    ComboBox {
+                        width: 332
+                        model: ["XY", "XZ", "YZ"]
+                        currentIndex: datumPlaneDialog.baseIdx
+                        onActivated: datumPlaneDialog.baseIdx = currentIndex
+                    }
+
+                    Text { text: qsTr("Offset (mm):"); font.pixelSize: 11; color: Theme.textSec }
+                    TextField {
+                        width: 332
+                        text: datumPlaneDialog.offsetMm.toString()
+                        font.pixelSize: 13; font.family: "monospace"
+                        validator: DoubleValidator { decimals: 4 }
+                        onTextChanged: {
+                            var v = parseFloat(text)
+                            if (!isNaN(v)) datumPlaneDialog.offsetMm = v
+                        }
+                    }
+
+                    // Tilt angles — optional, default 0. Each axis rotates
+                    // the plane around its reference's local X/Y.
+                    Row {
+                        spacing: 6; width: 332
+                        Column {
+                            spacing: 2; width: 163
+                            Text { text: qsTr("Rot X (°):"); font.pixelSize: 11; color: Theme.textSec }
+                            TextField {
+                                width: parent.width
+                                text: datumPlaneDialog.rotXDeg.toString()
+                                font.pixelSize: 13; font.family: "monospace"
+                                validator: DoubleValidator { decimals: 3 }
+                                onTextChanged: {
+                                    var v = parseFloat(text)
+                                    if (!isNaN(v)) datumPlaneDialog.rotXDeg = v
+                                }
+                            }
+                        }
+                        Column {
+                            spacing: 2; width: 163
+                            Text { text: qsTr("Rot Y (°):"); font.pixelSize: 11; color: Theme.textSec }
+                            TextField {
+                                width: parent.width
+                                text: datumPlaneDialog.rotYDeg.toString()
+                                font.pixelSize: 13; font.family: "monospace"
+                                validator: DoubleValidator { decimals: 3 }
+                                onTextChanged: {
+                                    var v = parseFloat(text)
+                                    if (!isNaN(v)) datumPlaneDialog.rotYDeg = v
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Face mode ────────────────────────────────────────
+                Column {
+                    visible: datumPlaneDialog.mode === "face"
+                    spacing: 6; width: 332
+                    Text { text: qsTr("Feature:"); font.pixelSize: 11; color: Theme.textSec }
+                    ComboBox {
+                        id: dpFeatureCombo
+                        width: 332
+                        onActivated: datumPlaneDialog.dpRefreshFaces()
+                    }
+                    Text { text: qsTr("Face:"); font.pixelSize: 11; color: Theme.textSec }
+                    ComboBox {
+                        id: dpFaceCombo
+                        width: 332
+                    }
+                    Text { text: qsTr("Offset along normal (mm):"); font.pixelSize: 11; color: Theme.textSec }
+                    TextField {
+                        width: 332
+                        text: datumPlaneDialog.offsetMm.toString()
+                        font.pixelSize: 13; font.family: "monospace"
+                        validator: DoubleValidator { decimals: 4 }
+                        onTextChanged: {
+                            var v = parseFloat(text)
+                            if (!isNaN(v)) datumPlaneDialog.offsetMm = v
+                        }
+                    }
+                }
+
+                Row {
+                    spacing: 6; width: 332
+                    Button {
+                        text: qsTr("Cancel"); width: 163
+                        onClicked: datumPlaneDialog.close()
+                    }
+                    Button {
+                        text: qsTr("Add"); width: 163; highlighted: true
+                        onClicked: {
+                            if (datumPlaneDialog.mode === "base") {
+                                cadEngine.addDatumPlaneRotated(
+                                    datumPlaneDialog.baseIdx,
+                                    datumPlaneDialog.offsetMm,
+                                    datumPlaneDialog.rotXDeg,
+                                    datumPlaneDialog.rotYDeg,
+                                    "DatumPlane")
+                            } else if (datumPlaneDialog.mode === "face") {
+                                if (dpFeatureCombo.currentIndex >= 0 &&
+                                    dpFaceCombo.currentIndex >= 0) {
+                                    var feats = dpFeatureCombo.model
+                                    cadEngine.addDatumPlaneOnFace(
+                                        feats[dpFeatureCombo.currentIndex],
+                                        dpFaceCombo.model[dpFaceCombo.currentIndex],
+                                        datumPlaneDialog.offsetMm,
+                                        "DatumPlane")
+                                }
+                            }
+                            datumPlaneDialog.close()
                         }
                     }
                 }

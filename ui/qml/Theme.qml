@@ -58,12 +58,34 @@ QtObject {
     readonly property color wbNesting:   "#7C3AED"
 
     // ── Feature Type Colors ────────────────────────────────────────
-    readonly property color ftSketch:    "#059669"
-    readonly property color ftPad:       "#16A34A"
-    readonly property color ftPocket:    "#DC2626"
-    readonly property color ftRevolution:"#2563EB"
-    readonly property color ftFillet:    "#7C3AED"
-    readonly property color ftChamfer:   "#7C3AED"
+    readonly property color ftSketch:    "#059669"   // teal — 2D profile
+    readonly property color ftPad:       "#16A34A"   // green — additive
+    readonly property color ftPocket:    "#DC2626"   // red — subtractive
+    readonly property color ftRevolution:"#2563EB"   // blue — rotational
+    readonly property color ftGroove:    "#F97316"   // orange — rotational-cut
+    readonly property color ftFillet:    "#7C3AED"   // purple — dress-up
+    readonly property color ftChamfer:   "#DB2777"   // pink — dress-up
+    readonly property color ftBody:      "#1E40AF"   // deep blue — container
+    readonly property color ftOrigin:    "#6B7280"   // neutral grey — origin group
+    readonly property color ftPlane:     "#F59E0B"   // amber — datum plane
+    readonly property color ftLine:      "#10B981"   // emerald — datum line
+    readonly property color ftPoint:     "#8B5CF6"   // violet — datum point
+    // Axis-specific colors to match the canvas/viewport gizmo (X=red,
+    // Y=green, Z=blue). `featureColor` returns these for the three
+    // App::Line children of Origin so the tree matches what the user
+    // sees on the canvas.
+    readonly property color ftAxisX:     "#DC2626"
+    readonly property color ftAxisY:     "#16A34A"
+    readonly property color ftAxisZ:     "#2563EB"
+    // Plane-specific shades for the three base planes. Same hue scheme
+    // but lighter so the amber reserved for user datum planes stands
+    // out.
+    readonly property color ftPlaneXY:   "#F59E0B"
+    readonly property color ftPlaneXZ:   "#84CC16"
+    readonly property color ftPlaneYZ:   "#0EA5E9"
+    readonly property color ftPrimitive: "#0EA5E9"   // sky — box/cylinder/sphere
+    readonly property color ftPattern:   "#EA580C"   // orange-red — pattern
+    readonly property color ftBoolean:   "#0891B2"   // cyan — boolean ops
     readonly property color ftDefault:   "#64748B"
 
     // ── Sketch Canvas Colors ───────────────────────────────────────
@@ -127,23 +149,102 @@ QtObject {
 
     // ── Helper Functions ───────────────────────────────────────────
     function featureColor(typeName) {
+        // Container first — PartDesign::Body reaches both "Body" and
+        // "BodyBase"; App::Origin is checked explicitly so it doesn't
+        // match the "Origin" suffix some datum features carry.
+        if (typeName === "PartDesign::Body" || typeName === "App::Part") return ftBody
+        if (typeName === "App::Origin") return ftOrigin
+        // App::Line under Origin is one of the three axes — we route by
+        // the row's label in ModelTreePanel (via featureColorByLabel);
+        // here we fall back to a generic emerald for anonymous lines.
+        if (typeName === "App::Line"  || typeName === "PartDesign::Line")  return ftLine
+        if (typeName === "App::Plane" || typeName === "PartDesign::Plane") return ftPlane
+        if (typeName === "App::Point" || typeName === "PartDesign::Point") return ftPoint
         if (typeName.indexOf("Sketch") >= 0) return ftSketch
+        if (typeName.indexOf("Groove") >= 0) return ftGroove
         if (typeName.indexOf("Pad") >= 0) return ftPad
         if (typeName.indexOf("Pocket") >= 0) return ftPocket
         if (typeName.indexOf("Revolution") >= 0) return ftRevolution
         if (typeName.indexOf("Fillet") >= 0) return ftFillet
         if (typeName.indexOf("Chamfer") >= 0) return ftChamfer
+        if (typeName.indexOf("LinearPattern") >= 0 ||
+            typeName.indexOf("PolarPattern") >= 0 ||
+            typeName.indexOf("Mirrored") >= 0) return ftPattern
+        if (typeName.indexOf("Fuse") >= 0 ||
+            typeName.indexOf("Cut")  >= 0 ||
+            typeName.indexOf("Common") >= 0) return ftBoolean
+        if (typeName.indexOf("Box") >= 0 ||
+            typeName.indexOf("Cylinder") >= 0 ||
+            typeName.indexOf("Sphere") >= 0 ||
+            typeName.indexOf("Cone") >= 0) return ftPrimitive
         return ftDefault
     }
 
+    // Glyphs picked from Unicode block ranges that render on every major
+    // platform without needing a special font. Each glyph visually hints
+    // at the feature's operation (pad = up-arrow, pocket = down-arrow,
+    // revolution = circular arrow, fillet = rounded corner, etc.).
     function featureIcon(typeName) {
-        if (typeName.indexOf("Sketch") >= 0) return "\u270E"
-        if (typeName.indexOf("Pad") >= 0) return "\u2B06"
-        if (typeName.indexOf("Pocket") >= 0) return "\u2B07"
-        if (typeName.indexOf("Revolution") >= 0) return "\u27F3"
-        if (typeName.indexOf("Fillet") >= 0) return "\u25CF"
-        if (typeName.indexOf("Chamfer") >= 0) return "\u25C6"
+        if (typeName === "PartDesign::Body") return "\u25A3"    // ▣ body container
+        if (typeName === "App::Origin")       return "\u2316"   // ⌖ origin crosshair
+        if (typeName === "App::Plane" || typeName === "PartDesign::Plane") return "\u25AD"   // ▭ plane
+        if (typeName === "App::Line"  || typeName === "PartDesign::Line")  return "\u2015"   // ― line
+        if (typeName === "App::Point" || typeName === "PartDesign::Point") return "\u25CF"   // ● point
+        if (typeName.indexOf("Sketch") >= 0)     return "\u270E" // ✎ sketch
+        if (typeName.indexOf("Groove") >= 0)     return "\u238B" // ⎋ cut-rotate
+        if (typeName.indexOf("Pad") >= 0)        return "\u2B06" // ⬆ additive
+        if (typeName.indexOf("Pocket") >= 0)     return "\u2B07" // ⬇ subtractive
+        if (typeName.indexOf("Revolution") >= 0) return "\u27F3" // ⟳ rotational
+        if (typeName.indexOf("Fillet") >= 0)     return "\u25D6" // ◖ round corner
+        if (typeName.indexOf("Chamfer") >= 0)    return "\u25C6" // ◆ diamond
+        if (typeName.indexOf("LinearPattern") >= 0) return "\u2630" // ☰ stacked
+        if (typeName.indexOf("PolarPattern") >= 0)  return "\u273F" // ✿ radial
+        if (typeName.indexOf("Mirrored") >= 0)   return "\u25D0" // ◐ half-fill
+        if (typeName.indexOf("Fuse") >= 0)       return "\u29FE" // ⧾ plus boxed
+        if (typeName.indexOf("Cut") >= 0)        return "\u2296" // ⊖ minus circled
+        if (typeName.indexOf("Common") >= 0)     return "\u2229" // ∩ intersection
+        if (typeName.indexOf("Box") >= 0)        return "\u25FC" // ◼ filled sq
+        if (typeName.indexOf("Cylinder") >= 0)   return "\u25CB" // ○ circle
+        if (typeName.indexOf("Sphere") >= 0)     return "\u2B24" // ⬤ filled circle
+        if (typeName.indexOf("Cone") >= 0)       return "\u25B2" // ▲ triangle
         return "\u25A0"
+    }
+
+    // Label-aware color override for the axis/plane triple under Origin.
+    // Same signature as featureColor but takes the row's label so the
+    // tree can paint X-axis red, Y-axis green, Z-axis blue to match the
+    // viewport gizmo.
+    function featureColorByLabel(typeName, label) {
+        var s = (label || "").toUpperCase()
+        if (typeName === "App::Line" || typeName === "PartDesign::Line") {
+            if (s.indexOf("X") === 0) return ftAxisX
+            if (s.indexOf("Y") === 0) return ftAxisY
+            if (s.indexOf("Z") === 0) return ftAxisZ
+        }
+        if (typeName === "App::Plane" || typeName === "PartDesign::Plane") {
+            if (s.indexOf("XY") === 0) return ftPlaneXY
+            if (s.indexOf("XZ") === 0) return ftPlaneXZ
+            if (s.indexOf("YZ") === 0) return ftPlaneYZ
+        }
+        return featureColor(typeName)
+    }
+
+    // Label-aware icon for the same axis/plane triple. Uses ↔ ↕ ↨ for
+    // X/Y/Z axes (horizontal / vertical / depth) and perspective-style
+    // ◇ quadrilaterals for the three plane variants.
+    function featureIconByLabel(typeName, label) {
+        var s = (label || "").toUpperCase()
+        if (typeName === "App::Line" || typeName === "PartDesign::Line") {
+            if (s.indexOf("X") === 0) return "\u27A1"   // ➡ X-axis
+            if (s.indexOf("Y") === 0) return "\u2B06"   // ⬆ Y-axis
+            if (s.indexOf("Z") === 0) return "\u2B06"   // (Z shown with its own colour)
+        }
+        if (typeName === "App::Plane" || typeName === "PartDesign::Plane") {
+            // ⬢ filled hexagon reads as a 3-D perspective quadrilateral
+            // in the small 12px font size used in the tree.
+            return "\u2B22"
+        }
+        return featureIcon(typeName)
     }
 
     function shortTypeName(typeName) {

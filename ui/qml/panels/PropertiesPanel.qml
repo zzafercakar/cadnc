@@ -75,7 +75,6 @@ Rectangle {
 
                     PropertyRow { label: "Name"; value: "Untitled" }
                     PropertyRow { label: "Features"; value: cadEngine.featureTree.length.toString() }
-                    PropertyRow { label: "Backend"; value: "FreeCAD 1.2" }
                 }
 
                 // ── Feature List (compact) ──────────────────────────
@@ -156,13 +155,14 @@ Rectangle {
                 }
 
                 // ── Viewport Info ───────────────────────────────────
+                // UX-012: Grid control moved to the status bar; only static
+                // render info shown here.
                 PropertySection {
                     title: "Display"
                     visible: !cadEngine.sketchActive
 
                     PropertyRow { label: "Render"; value: "OCCT V3d" }
                     PropertyRow { label: "MSAA"; value: "8x" }
-                    PropertyRow { label: "Grid"; value: "10mm" }
                 }
 
                 // ── Empty state ─────────────────────────────────────
@@ -248,4 +248,5 @@ Rectangle {
             }
         }
     }
+
 }

@@ -81,6 +81,15 @@ int SketchFacade::addRectangle(Point2D p1, Point2D p2, bool construction)
         addCoincident(id2, 2, id3, 1);
         addCoincident(id3, 2, id0, 1);
 
+        // Alignment constraints (mirrors FreeCAD DrawSketchHandlerRectangle
+        // addAlignmentConstraints for Diagonal mode): L0/L2 share Y so are
+        // horizontal; L1/L3 share X so are vertical. Without these the solver
+        // has no way to preserve right angles when a Distance is applied.
+        addHorizontal(id0);
+        addHorizontal(id2);
+        addVertical(id1);
+        addVertical(id3);
+
         return id0;
     } catch (...) {
         return -1;
@@ -273,6 +282,29 @@ int SketchFacade::addFixed(int geoId)
     return impl_->sketch->addConstraint(c.release());
 }
 
+int SketchFacade::addPointOnObject(int pointGeo, int pointPos, int curveGeo)
+{
+    try {
+        auto c = std::make_unique<Sketcher::Constraint>();
+        c->Type = Sketcher::PointOnObject;
+        c->setElement(0, Sketcher::GeoElementId(pointGeo, static_cast<Sketcher::PointPos>(pointPos)));
+        c->setElement(1, Sketcher::GeoElementId(curveGeo, Sketcher::PointPos::none));
+        return impl_->sketch->addConstraint(c.release());
+    } catch (...) { return -1; }
+}
+
+int SketchFacade::addSymmetric(int g1, int pos1, int g2, int pos2, int g3, int pos3)
+{
+    try {
+        auto c = std::make_unique<Sketcher::Constraint>();
+        c->Type = Sketcher::Symmetric;
+        c->setElement(0, Sketcher::GeoElementId(g1, static_cast<Sketcher::PointPos>(pos1)));
+        c->setElement(1, Sketcher::GeoElementId(g2, static_cast<Sketcher::PointPos>(pos2)));
+        c->setElement(2, Sketcher::GeoElementId(g3, static_cast<Sketcher::PointPos>(pos3)));
+        return impl_->sketch->addConstraint(c.release());
+    } catch (...) { return -1; }
+}
+
 void SketchFacade::removeConstraint(int constraintId)
 {
     try { impl_->sketch->delConstraint(constraintId); } catch (...) {}
@@ -299,18 +331,65 @@ int SketchFacade::trim(int geoId, Point2D point)
 
 int SketchFacade::fillet(int geoId1, int geoId2, double radius)
 {
-    // FreeCAD fillet on a vertex identified by geoId + PointPos
+    // FreeCAD fillet on a vertex identified by geoId + PointPos.
+    // BUG-017: `SketchObject::fillet` only adds Tangent + Coincident
+    // constraints — no Radius. That leaves the arc radius undimensioned,
+    // so Smart Dimension / constraint panel can't edit it later. We
+    // attach a Radius datum on the new arc ourselves so the fillet is
+    // parametric from the start (matches FreeCAD GUI expectations).
     try {
-        return impl_->sketch->fillet(geoId1, static_cast<Sketcher::PointPos>(geoId2), radius);
+        int highestBefore = impl_->sketch->getHighestCurveIndex();
+        int result = impl_->sketch->fillet(geoId1,
+                                           static_cast<Sketcher::PointPos>(geoId2),
+                                           radius);
+        if (result < 0) return -1;
+
+        // Locate the newly added arc — SketchObject::fillet appends it at
+        // the end, so it's the first arc-of-circle above the pre-fillet
+        // index. Search top-down to skip any support geometry inserted
+        // after it (none currently, but be conservative).
+        int newHighest = impl_->sketch->getHighestCurveIndex();
+        for (int gid = newHighest; gid > highestBefore; --gid) {
+            const Part::Geometry* g = impl_->sketch->getGeometry(gid);
+            if (g && g->is<Part::GeomArcOfCircle>()) {
+                addRadius(gid, radius);
+                return gid;  // QML uses this to pre-select the arc
+            }
+        }
+        return result;
     } catch (...) { return -1; }
 }
 
 int SketchFacade::chamfer(int geoId1, int geoId2, double size)
 {
-    // FreeCAD fillet with chamfer=true creates a real chamfer
+    // FreeCAD fillet with chamfer=true inserts a new line segment at the
+    // corner. By default no Distance constraint is added, so the UI can't
+    // later change the chamfer size via Smart Dimension. We find the new
+    // line (highest index after the op) and add a Distance equal to its
+    // current length so the dimension flow reaches parity with fillet.
     try {
-        return impl_->sketch->fillet(geoId1, static_cast<Sketcher::PointPos>(geoId2),
-                                      size, true, false, true);
+        int highestBefore = impl_->sketch->getHighestCurveIndex();
+        int result = impl_->sketch->fillet(geoId1,
+                                           static_cast<Sketcher::PointPos>(geoId2),
+                                           size, true, false, true);
+        if (result < 0) return -1;
+
+        int newHighest = impl_->sketch->getHighestCurveIndex();
+        for (int gid = newHighest; gid > highestBefore; --gid) {
+            const Part::Geometry* g = impl_->sketch->getGeometry(gid);
+            if (g && g->is<Part::GeomLineSegment>()) {
+                // Use actual chord length of the inserted segment (not the
+                // requested `size` — the two offsets set distance along
+                // each edge, not the resulting hypotenuse).
+                auto* seg = static_cast<const Part::GeomLineSegment*>(g);
+                Base::Vector3d a = seg->getStartPoint();
+                Base::Vector3d b = seg->getEndPoint();
+                double len = (b - a).Length();
+                addDistance(gid, len);
+                return gid;
+            }
+        }
+        return result;
     } catch (...) { return -1; }
 }
 
@@ -341,8 +420,16 @@ SolveResult SketchFacade::solve()
 {
     try {
         int result = impl_->sketch->solve();
+        // FreeCAD's SketchObject::solve returns 0 whenever the planegcs
+        // solver converges — even when the sketch still has remaining
+        // degrees of freedom. We need DoF=0 to claim "fully constrained"
+        // so the UI can switch from blue (free) to green (locked).
         switch (result) {
-            case 0:  return SolveResult::Solved;
+            case 0:  {
+                int dof = impl_->sketch->getLastDoF();
+                return dof == 0 ? SolveResult::Solved
+                                : SolveResult::UnderConstrained;
+            }
             case -1: return SolveResult::SolverError;
             case -2: return SolveResult::Redundant;
             case -3: return SolveResult::Conflicting;
@@ -352,6 +439,11 @@ SolveResult SketchFacade::solve()
     } catch (...) {
         return SolveResult::SolverError;
     }
+}
+
+int SketchFacade::dof() const
+{
+    try { return impl_->sketch->getLastDoF(); } catch (...) { return -1; }
 }
 
 // ── Query ───────────────────────────────────────────────────────────
@@ -473,6 +565,33 @@ int SketchFacade::constraintCount() const
 void SketchFacade::close()
 {
     try { impl_->sketch->solve(); } catch (...) {}
+}
+
+int SketchFacade::planeType() const
+{
+    // Determine the standard plane by transforming both the sketch's
+    // local +Z (normal) and local +X through the stored Placement.
+    // Using both axes disambiguates rotations that produce identical
+    // normals but differ in in-plane orientation.
+    if (!impl_->sketch) return -1;
+    try {
+        Base::Placement pl = impl_->sketch->Placement.getValue();
+        Base::Vector3d n(0, 0, 1), xLocal(1, 0, 0);
+        pl.getRotation().multVec(n, n);
+        pl.getRotation().multVec(xLocal, xLocal);
+
+        // Pick the dominant axis of the normal
+        double ax = std::abs(n.x), ay = std::abs(n.y), az = std::abs(n.z);
+        if (az >= ax && az >= ay) return 0;                 // XY (normal mostly ±Z)
+        // Normal mostly ±Y → XZ unless local X mapped onto Y (then YZ)
+        if (ay >= ax && ay >= az) {
+            if (std::abs(xLocal.y) > 0.5) return 2;          // YZ (X→Y)
+            return 1;                                        // XZ (X stays X)
+        }
+        // Normal mostly ±X → YZ
+        return 2;
+    } catch (...) {}
+    return -1;
 }
 
 } // namespace CADNC

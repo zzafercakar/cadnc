@@ -3,6 +3,7 @@
 
 #include <CXX/WrapPython.h>
 #include <Base/Console.h>
+#include <Base/Interpreter.h>
 #include <App/Application.h>
 
 // Module init functions — register with Python before Py_Initialize
@@ -31,10 +32,28 @@ bool CadSession::initialize(int argc, char** argv)
         // Full FreeCAD application init (Python, types, config, scripts)
         App::Application::init(argc, argv);
 
-        // Note: PartDesign types (Body, Pad, etc.) may not be registered in
-        // FreeCAD's type system yet because that requires Python module import.
-        // CadDocument::ensureBody() and PartFacade use direct C++ instantiation
-        // as a fallback when type-registry addObject fails.
+        // BUG-010 fix: explicitly load the FreeCAD C++ extension modules so
+        // their PyMOD_INIT_FUNC bodies run — each one calls `::init()` on
+        // every type the module owns (PartDesign::Body, PartDesign::Pad,
+        // etc.), registering them with Base::Type. Without this, the string
+        // factory `doc->addObject("PartDesign::Body", ...)` fails with
+        // "type not registered" and features fall back to OCCT.
+        //
+        // We also alias `_PartDesign` as `PartDesign` in sys.modules so
+        // `Type::getTypeIfDerivedFrom` succeeds when it does its implicit
+        // `Interpreter().loadModule("PartDesign")` — FreeCAD normally ships
+        // a Python wrapper package under that name; we don't, so we alias.
+        try {
+            Base::Interpreter().runString("import Part");
+            Base::Interpreter().runString("import Sketcher");
+            Base::Interpreter().runString("import Materials");
+            Base::Interpreter().runString("import _PartDesign");
+            Base::Interpreter().runString(
+                "import sys; sys.modules['PartDesign'] = sys.modules['_PartDesign']");
+        } catch (const Base::Exception& e) {
+            fprintf(stderr, "CADNC: module import warning: %s\n", e.what());
+            // Not fatal — sketch-only workflow still works via the OCCT fallback.
+        }
 
         Base::Console().log("CADNC: FreeCAD backend initialized\n");
         initialized_ = true;

@@ -89,10 +89,51 @@ void OccViewport::viewRight()
     update();
 }
 
+void OccViewport::setGridStep(double mm)
+{
+    if (!renderer_) return;
+    renderer_->queueGridStep(mm);
+    update();
+}
+
+void OccViewport::setGridVisible(bool on)
+{
+    userWantsGrid_ = on;
+    if (!renderer_) return;
+    // While sketching, the SketchCanvas owns the visible grid — never let the
+    // OCCT 3D grid show through behind it (its world-space dots don't align
+    // with the SketchCanvas's pan/zoom-space dots, which user testing flagged
+    // as "visible grid doesn't match the snap grid").
+    renderer_->queueGridVisible(on && !sketchMode_);
+    update();
+}
+
+void OccViewport::setSketchMode(bool on)
+{
+    if (sketchMode_ == on) return;
+    sketchMode_ = on;
+    // Flip the OCCT grid in lockstep: off in sketch mode, back to the user's
+    // preference in part mode.
+    if (renderer_) {
+        renderer_->queueGridVisible(!on && userWantsGrid_);
+        update();
+    }
+    Q_EMIT sketchModeChanged();
+}
+
 void OccViewport::viewIsometric()
 {
     if (!renderer_) return;
     renderer_->queueViewPreset(4);
+    update();
+}
+
+void OccViewport::forwardNavCubeClick(int px, int py)
+{
+    // Convert from logical (DPI) to physical pixels and forward to the renderer.
+    if (!renderer_) return;
+    const double s = renderer_->scale();
+    renderer_->queueViewCubeClick(static_cast<int>(px * s), static_cast<int>(py * s));
     update();
 }
 

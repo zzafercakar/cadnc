@@ -52,6 +52,11 @@ Rectangle {
 
         Rectangle { width: 1; height: 32; color: "#CBD5E1" }
 
+        // Smart Dimension — auto type from geometry, on-canvas inline input
+        CadToolButton { iconPath: "qrc:/resources/icons/constraint/distance.svg"; tipText: "Smart Dimension (D)"; isActive: activeTool === "dimension"; accentColor: "#7C3AED"; activeColor: "#A78BFA"; onClicked: toolSelected("dimension") }
+
+        Rectangle { width: 1; height: 32; color: "#CBD5E1" }
+
         // Constraints
         CadToolButton { iconPath: "qrc:/resources/icons/constraint/coincident.svg"; tipText: "Coincident"; accentColor: "#7C3AED"; onClicked: constraintRequested("coincident") }
         CadToolButton { iconPath: "qrc:/resources/icons/constraint/horiz.svg"; tipText: "Horizontal (H)"; accentColor: "#7C3AED"; onClicked: constraintRequested("horizontal") }

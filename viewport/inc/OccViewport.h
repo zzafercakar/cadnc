@@ -53,13 +53,24 @@ public:
     Q_INVOKABLE void viewRight();
     Q_INVOKABLE void viewIsometric();
 
+    /// Forward a click to the ViewCube even when an overlay (SketchCanvas)
+    /// covers this widget. Used so the NavCube stays interactive in sketch mode.
+    Q_INVOKABLE void forwardNavCubeClick(int px, int py);
+
     /// Direct native shape API (called from C++ adapter, not QML)
     /// wireframe: true = display as wireframe (for sketches), false = shaded (for solids)
     void displayShape(const std::string& id, const TopoDS_Shape& shape,
                       const Quantity_Color& color, bool wireframe = false);
 
+    /// Update the rectangular grid spacing (mm). Thread-safe: the change is
+    /// queued to the render thread so the OCCT viewer is not touched from UI.
+    Q_INVOKABLE void setGridStep(double mm);
+
+    /// Toggle visibility of the OCCT 3D viewer grid. Queued to render thread.
+    Q_INVOKABLE void setGridVisible(bool on);
+
     bool sketchMode() const { return sketchMode_; }
-    void setSketchMode(bool on) { if (sketchMode_ != on) { sketchMode_ = on; Q_EMIT sketchModeChanged(); } }
+    void setSketchMode(bool on);
 
 Q_SIGNALS:
     void viewReady();
@@ -77,6 +88,10 @@ private:
     // Renderer is owned by Qt's scene graph, we keep a non-owning pointer
     mutable OccRenderer* renderer_ = nullptr;
     bool sketchMode_ = false;
+    // Remember the user's intended grid visibility so we can restore it when
+    // leaving sketch mode. Sketch mode force-hides the OCCT 3D grid so it
+    // can't overlay the SketchCanvas 2D grid at a different coordinate origin.
+    bool userWantsGrid_ = true;
 };
 
 } // namespace CADNC

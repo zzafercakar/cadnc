@@ -76,10 +76,17 @@ public:
     /// Queue a view preset change (1=top, 2=front, 3=right, 4=iso)
     void queueViewPreset(int preset);
 
+    /// Queue a rectangular grid spacing change (mm, both X and Y step).
+    /// Applied on the next render() — OCCT grid calls must run on the GL thread.
+    void queueGridStep(double mm);
+
+    /// Queue a grid visibility change (ActivateGrid / DeactivateGrid).
+    void queueGridVisible(bool on);
+
     // ── Accessors ──────────────────────────────────────────────────
     Handle(V3d_View) view() const { return view_; }
     Handle(AIS_InteractiveContext) context() const { return context_; }
-    double scale() const { return scale_; }
+    double scale() const { return scale_.load(std::memory_order_relaxed); }
 
 protected:
     /// Override to schedule QML update when OCCT requests another frame
@@ -101,7 +108,8 @@ private:
     // Shape storage: id → AIS_Shape (render thread only)
     std::map<std::string, Handle(AIS_Shape)> shapes_;
 
-    double scale_ = 1.0;
+    // Read from UI thread (forwardNavCubeClick), written on render thread.
+    std::atomic<double> scale_ {1.0};
 
     // Deferred operations
     std::mutex opsMutex_;
@@ -118,6 +126,14 @@ private:
 
     // Deferred view preset: projection direction queued from UI thread
     std::atomic<int> pendingViewPreset_{0};  // 0=none, 1=top, 2=front, 3=right, 4=iso
+
+    // Deferred grid-step change. 0.0 = no pending change. Atomic double is
+    // well-defined on common platforms; the value is only ever written by
+    // the UI thread and consumed on the render thread.
+    std::atomic<double> pendingGridStep_{0.0};
+
+    // Deferred grid-visibility change. 0 = no pending, 1 = show, -1 = hide.
+    std::atomic<int> pendingGridVisible_{0};
 };
 
 } // namespace CADNC

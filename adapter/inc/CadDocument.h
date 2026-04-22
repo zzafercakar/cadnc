@@ -13,6 +13,11 @@
 #include <string>
 #include <vector>
 
+// Forward declaration at global scope — OCCT types live outside CADNC's
+// namespace. Keeps the header free of heavy OCCT includes while still
+// letting `exportObj`/`exportDxf` receive the shape by reference.
+class TopoDS_Shape;
+
 namespace CADNC {
 
 class SketchFacade;
@@ -23,6 +28,7 @@ struct FeatureInfo {
     std::string name;       // internal name (e.g. "Sketch001")
     std::string label;      // user-visible label
     std::string typeName;   // e.g. "Sketcher::SketchObject"
+    std::string parent;     // parent group name (Body/Origin) — empty if top-level
 };
 
 class CadDocument {
@@ -57,15 +63,75 @@ public:
     bool deleteFeature(const std::string& name);
     bool renameFeature(const std::string& name, const std::string& newLabel);
 
+    /// Toggle the feature's `Visibility` property (FreeCAD PropertyBool).
+    /// Returns the new state, or false for unknown names. The viewport
+    /// reads this on the next `updateViewportShapes()` pass.
+    bool toggleVisibility(const std::string& name);
+    bool isVisible(const std::string& name) const;
+
+    /// List names of features that depend on the given name (via
+    /// App::DocumentObject::getInList). Used by the tree context menu's
+    /// "Show dependencies" action.
+    std::vector<std::string> dependents(const std::string& name) const;
+
     // ── Undo / Redo ─────────────────────────────────────────────────
     void undo();
     void redo();
     bool canUndo() const;
     bool canRedo() const;
 
+    /// Begin a transaction; property changes until commitTransaction() end up
+    /// as one undo entry. Pass a human-readable name ("Add Line" etc.) — it
+    /// appears in the undo history. No-op if the document is null.
+    void openTransaction(const char* name);
+    void commitTransaction();
+    void abortTransaction();
+
     // ── Sketch operations ───────────────────────────────────────────
     /// Add a new sketch and return a facade. planeType: 0=XY, 1=XZ, 2=YZ
     std::shared_ptr<SketchFacade> addSketch(const std::string& name = "Sketch", int planeType = 0);
+
+    /// Add a sketch attached to a face of an existing feature. subElement is
+    /// a FreeCAD sub-name like "Face1". Uses Attacher::mmFlatFace so the
+    /// sketch's placement is derived from the face on recompute.
+    std::shared_ptr<SketchFacade> addSketchOnFace(const std::string& name,
+                                                   const std::string& featureName,
+                                                   const std::string& subElement);
+
+    /// Add a sketch attached to a (datum) plane — either an App::Plane
+    /// under Origin or a PartDesign::Plane under the Body. Uses the same
+    /// AttachExtension plumbing as `addSketchOnFace` but with mmFlatFace
+    /// pointing at the plane itself (no sub-element needed).
+    std::shared_ptr<SketchFacade> addSketchOnPlane(const std::string& name,
+                                                    const std::string& planeFeatureName);
+
+    /// List "Face1".."FaceN" sub-names of a feature's shape, in TopExp
+    /// iteration order (matches FreeCAD's sub-element naming convention).
+    std::vector<std::string> featureFaceNames(const std::string& featureName) const;
+
+    /// Add a user-defined datum plane parallel to one of the three base
+    /// planes (0=XY, 1=XZ, 2=YZ) at the given offset in mm. Returns the
+    /// new plane's internal name (empty on failure). The plane lives
+    /// under the active Body so `createSketch(name, -1, datumName)` can
+    /// later attach a sketch to it.
+    std::string addDatumPlane(int basePlane, double offset, const std::string& label = "DatumPlane");
+
+    /// Rich datum plane with rotation (degrees) around the reference
+    /// plane's local X/Y axes and an offset. Used by the enriched
+    /// "New Datum Plane" dialog. `rotXDeg` tilts around local X,
+    /// `rotYDeg` tilts around local Y — matches FreeCAD's
+    /// AttachmentOffset convention.
+    std::string addDatumPlaneRotated(int basePlane, double offset,
+                                       double rotXDeg, double rotYDeg,
+                                       const std::string& label = "DatumPlane");
+
+    /// Datum plane attached to an existing feature's face. `faceName`
+    /// should be "Face1"..."FaceN" (see featureFaceNames). The plane
+    /// lies on the face plus an optional offset along its normal.
+    std::string addDatumPlaneOnFace(const std::string& featureName,
+                                     const std::string& faceName,
+                                     double offset,
+                                     const std::string& label = "DatumPlane");
 
     /// Get a facade for an existing sketch by name
     std::shared_ptr<SketchFacade> getSketch(const std::string& name);
@@ -85,6 +151,12 @@ public:
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
+
+    // OBJ/DXF exporters — take the OCCT shape by reference (forward-
+    // declared at global scope above). The definitions pull in the full
+    // TopoDS_Shape header inside the .cpp.
+    bool exportObj(const ::TopoDS_Shape& shape, const std::string& path) const;
+    bool exportDxf(const ::TopoDS_Shape& shape, const std::string& path) const;
 };
 
 } // namespace CADNC

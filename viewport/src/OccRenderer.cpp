@@ -84,7 +84,7 @@ OccRenderer::~OccRenderer()
 
 void OccRenderer::synchronize(QQuickFramebufferObject* item)
 {
-    scale_ = item->window()->devicePixelRatio();
+    scale_.store(item->window()->devicePixelRatio(), std::memory_order_relaxed);
 }
 
 void OccRenderer::render()
@@ -123,6 +123,31 @@ void OccRenderer::render()
     if (pendingFitAll_.exchange(false)) {
         view_->FitAll();
         view_->ZFitAll();
+    }
+
+    // Process deferred grid-visibility change. ActivateGrid/DeactivateGrid
+    // touch viewer state so they must run on the render thread.
+    int vis = pendingGridVisible_.exchange(0, std::memory_order_acquire);
+    if (vis != 0 && !viewer_.IsNull()) {
+        if (vis > 0) viewer_->ActivateGrid(Aspect_GT_Rectangular, Aspect_GDM_Points);
+        else         viewer_->DeactivateGrid();
+        view_->Invalidate();
+    }
+
+    // Process deferred grid-step change. OCCT's grid API mutates viewer
+    // geometry so it must run on the render thread.
+    double newStep = pendingGridStep_.exchange(0.0, std::memory_order_acquire);
+    if (newStep > 0.0 && !viewer_.IsNull()) {
+        // BUG-009: a fixed 5000mm graphic extent with a 1mm step produces
+        // 10000x10000 dots and freezes OCCT's point renderer. Bound the
+        // total dot count by shrinking the extent when step is small.
+        // Target: ≤200 dots per axis (40k total) — stays smooth on weak GPUs.
+        double extent = newStep * 100.0;               // 200 dots per axis
+        if (extent < 200.0)  extent = 200.0;           // keep a usable view
+        if (extent > 2000.0) extent = 2000.0;          // cap for huge steps
+        viewer_->SetRectangularGridValues(0.0, 0.0, newStep, newStep, 0.0);
+        viewer_->SetRectangularGridGraphicValues(extent, extent, 0.0);
+        view_->Invalidate();
     }
 
     // Process deferred view preset (SetProj must run on render thread)
@@ -308,6 +333,17 @@ void OccRenderer::queueViewCubeClick(int px, int py)
 void OccRenderer::queueViewPreset(int preset)
 {
     pendingViewPreset_.store(preset, std::memory_order_release);
+}
+
+void OccRenderer::queueGridStep(double mm)
+{
+    if (mm < 0.5) mm = 0.5;
+    pendingGridStep_.store(mm, std::memory_order_release);
+}
+
+void OccRenderer::queueGridVisible(bool on)
+{
+    pendingGridVisible_.store(on ? 1 : -1, std::memory_order_release);
 }
 
 void OccRenderer::processPendingShapeOps()
