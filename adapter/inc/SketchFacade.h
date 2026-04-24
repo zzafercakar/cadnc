@@ -134,6 +134,13 @@ public:
     /// the fitted Geom_Circle. Throws InvalidArgument when the triple is
     /// collinear or coincident.
     int addCircle3Point(Point2D p1, Point2D p2, Point2D p3, bool construction = false);
+    /// Ellipse from three points. Following FreeCAD's DrawSketchHandlerEllipse
+    /// ThreeRim interpretation: @p p1 and @p p2 are the two endpoints of
+    /// the major axis; @p p3 is any point on the rim used to infer the
+    /// minor radius. Throws InvalidArgument when p1≈p2 (zero major axis),
+    /// when p3 is outside the major-axis band, or when p3 is on the major
+    /// axis itself (yields zero minor radius).
+    int addEllipse3Point(Point2D p1, Point2D p2, Point2D p3, bool construction = false);
     int addRectangle(Point2D p1, Point2D p2, bool construction = false);
     int addPoint(Point2D p, bool construction = false);
     int addEllipse(Point2D center, double majorRadius, double minorRadius,

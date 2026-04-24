@@ -131,6 +131,15 @@ Rectangle {
             activeColor: "#34D399"
             onClicked: toolSelected("ellipse")
         }
+        // Tool #12 — Sketcher_CreateEllipseBy3Points (CommandCreateGeo.cpp:660).
+        CadToolButton {
+            iconPath: "qrc:/resources/icons/sketcher/Sketcher_CreateEllipse_3points.svg"
+            tipText: qsTr("Creates an ellipse from 3 points on its perimeter") + " (G, 3, E)"
+            shortcut: "G, 3, E"
+            isActive: activeTool === "ellipse3point"
+            activeColor: "#34D399"
+            onClicked: toolSelected("ellipse3point")
+        }
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/spline.svg"; tipText: "B-Spline (S)"; isActive: activeTool === "bspline"; activeColor: "#34D399"; onClicked: toolSelected("bspline") }
         // Tool #1 — Sketcher_CreatePoint (FreeCAD CmdSketcherCreatePoint
         // at src/Mod/Sketcher/Gui/CommandCreateGeo.cpp:107). Tooltip and

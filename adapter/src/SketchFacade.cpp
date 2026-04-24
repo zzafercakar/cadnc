@@ -220,6 +220,48 @@ int SketchFacade::addCircle3Point(Point2D p1, Point2D p2, Point2D p3, bool const
     CADNC_SKETCH_FACADE_CATCH("addCircle3Point")
 }
 
+int SketchFacade::addEllipse3Point(Point2D p1, Point2D p2, Point2D p3, bool construction)
+{
+    CADNC_SKETCH_FACADE_PRECHECK("addEllipse3Point");
+    // Compute axis-aligned ellipse in local frame per the major-axis
+    // interpretation. A zero-length major axis (p1≈p2) is un-definable.
+    const double mx = p2.x - p1.x;
+    const double my = p2.y - p1.y;
+    const double majorLen = std::sqrt(mx * mx + my * my);
+    if (majorLen < 1e-7) {
+        throw FacadeError(FacadeError::Code::InvalidArgument,
+            QCoreApplication::translate("SketchFacade",
+                "addEllipse3Point: p1 and p2 must differ (major axis endpoints)"));
+    }
+    const double majorRad = majorLen / 2.0;
+    const double cx = (p1.x + p2.x) / 2.0;
+    const double cy = (p1.y + p2.y) / 2.0;
+    const double ux = mx / majorLen;
+    const double uy = my / majorLen;
+    // Rotate p3 into the axis-aligned local frame.
+    const double dx = p3.x - cx;
+    const double dy = p3.y - cy;
+    const double localX = dx * ux + dy * uy;
+    const double localY = -dx * uy + dy * ux;
+    if (std::abs(localX) >= majorRad - 1e-9) {
+        throw FacadeError(FacadeError::Code::InvalidArgument,
+            QCoreApplication::translate("SketchFacade",
+                "addEllipse3Point: p3 projection exceeds major-axis bounds"));
+    }
+    if (std::abs(localY) < 1e-9) {
+        throw FacadeError(FacadeError::Code::InvalidArgument,
+            QCoreApplication::translate("SketchFacade",
+                "addEllipse3Point: p3 lies on the major axis (minor radius would be 0)"));
+    }
+    const double ratio = localX / majorRad;
+    const double minorRad = std::abs(localY) / std::sqrt(1.0 - ratio * ratio);
+    const double rotation = std::atan2(uy, ux);
+    // Delegate to addEllipse which already has the major>=minor guarantee
+    // via std::max/std::min swap. Call the facade-local method so we get
+    // its FacadeError translation and the same OCCT-exception wrapping.
+    return addEllipse({cx, cy}, majorRad, minorRad, rotation, construction);
+}
+
 int SketchFacade::addRectangle(Point2D p1, Point2D p2, bool construction)
 {
     CADNC_SKETCH_FACADE_PRECHECK("addRectangle");

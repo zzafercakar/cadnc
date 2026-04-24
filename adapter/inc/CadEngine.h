@@ -198,6 +198,11 @@ public:
     Q_INVOKABLE int addCircle3Point(double x1, double y1,
                                      double x2, double y2,
                                      double x3, double y3);
+    /// Ellipse from three points — p1/p2 are major-axis endpoints, p3 a
+    /// rim point used to infer the minor radius (FreeCAD ThreeRim mode).
+    Q_INVOKABLE int addEllipse3Point(double x1, double y1,
+                                      double x2, double y2,
+                                      double x3, double y3);
     Q_INVOKABLE int addRectangle(double x1, double y1, double x2, double y2);
     Q_INVOKABLE int addPoint(double x, double y);
     Q_INVOKABLE int addEllipse(double cx, double cy, double majorR, double minorR, double angleDeg = 0);
