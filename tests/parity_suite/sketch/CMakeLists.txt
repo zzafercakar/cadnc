@@ -18,6 +18,7 @@ set(PARITY_SKETCH_SOURCES
     test_drawing_arc_parabola.cpp  # Tool #8 — CmdSketcherCreateArcOfParabola
     test_drawing_circle.cpp        # Tool #9 — CmdSketcherCreateCircle
     test_drawing_circle3point.cpp  # Tool #10 — CmdSketcherCreate3PointCircle
+    test_drawing_ellipse.cpp       # Tool #11 — CmdSketcherCreateEllipseByCenter
     # ... etc.
 )
 

@@ -122,7 +122,15 @@ Rectangle {
             activeColor: "#34D399"
             onClicked: toolSelected("polyline")
         }
-        CadToolButton { iconPath: "qrc:/resources/icons/sketch/ellipse.svg"; tipText: "Ellipse (E)"; isActive: activeTool === "ellipse"; activeColor: "#34D399"; onClicked: toolSelected("ellipse") }
+        // Tool #11 — Sketcher_CreateEllipseByCenter (CommandCreateGeo.cpp:625).
+        CadToolButton {
+            iconPath: "qrc:/resources/icons/sketcher/Sketcher_CreateEllipseByCenter.svg"
+            tipText: qsTr("Creates an ellipse from a center and rim point") + " (G, E, E)"
+            shortcut: "G, E, E"
+            isActive: activeTool === "ellipse"
+            activeColor: "#34D399"
+            onClicked: toolSelected("ellipse")
+        }
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/spline.svg"; tipText: "B-Spline (S)"; isActive: activeTool === "bspline"; activeColor: "#34D399"; onClicked: toolSelected("bspline") }
         // Tool #1 — Sketcher_CreatePoint (FreeCAD CmdSketcherCreatePoint
         // at src/Mod/Sketcher/Gui/CommandCreateGeo.cpp:107). Tooltip and
