@@ -130,6 +130,10 @@ public:
     int addArcParabola(Point2D vertex, double focal, double rotation,
                        double startParam, double endParam,
                        bool construction = false);
+    /// Circle through three points — uses OCCT GC_MakeCircle and extracts
+    /// the fitted Geom_Circle. Throws InvalidArgument when the triple is
+    /// collinear or coincident.
+    int addCircle3Point(Point2D p1, Point2D p2, Point2D p3, bool construction = false);
     int addRectangle(Point2D p1, Point2D p2, bool construction = false);
     int addPoint(Point2D p, bool construction = false);
     int addEllipse(Point2D center, double majorRadius, double minorRadius,

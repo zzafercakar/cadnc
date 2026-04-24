@@ -10,6 +10,7 @@
         "Sketcher_CreateArcOfEllipse": "G, E, A",
         "Sketcher_CreateArcOfHyperbola": "G, H",
         "Sketcher_CreateArcOfParabola": "G, J",
-        "Sketcher_CreateCircle": "G, C"
+        "Sketcher_CreateCircle": "G, C",
+        "Sketcher_Create3PointCircle": "G, 3, C"
     }
 }

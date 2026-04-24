@@ -671,6 +671,22 @@ int CadEngine::addArcParabola(double vx, double vy, double focal,
     } catch (const FacadeError& e) { setLastError(e.userMessage()); return -1; }
 }
 
+int CadEngine::addCircle3Point(double x1, double y1,
+                                double x2, double y2,
+                                double x3, double y3)
+{
+    if (!activeSketch_) { setLastError(tr("No active sketch")); return -1; }
+    try {
+        ScopedTransaction tx(document_.get(), "Add Circle (3 Points)");
+        int id = activeSketch_->addCircle3Point({x1, y1}, {x2, y2}, {x3, y3});
+        tx.commit();
+        setLastError(QString());
+        Q_EMIT undoStateChanged();
+        refreshSketch();
+        return id;
+    } catch (const FacadeError& e) { setLastError(e.userMessage()); return -1; }
+}
+
 int CadEngine::addRectangle(double x1, double y1, double x2, double y2)
 {
     if (!activeSketch_) { setLastError(tr("No active sketch")); return -1; }

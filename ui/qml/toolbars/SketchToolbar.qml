@@ -51,6 +51,15 @@ Rectangle {
             activeColor: "#34D399"
             onClicked: toolSelected("circle")
         }
+        // Tool #10 — Sketcher_Create3PointCircle (CommandCreateGeo.cpp:589).
+        CadToolButton {
+            iconPath: "qrc:/resources/icons/sketcher/Sketcher_Create3PointCircle.svg"
+            tipText: qsTr("Creates a circle from 3 perimeter points") + " (G, 3, C)"
+            shortcut: "G, 3, C"
+            isActive: activeTool === "circle3point"
+            activeColor: "#34D399"
+            onClicked: toolSelected("circle3point")
+        }
         // Tool #4 — Sketcher_CreateArc (FreeCAD CmdSketcherCreateArc
         // at src/Mod/Sketcher/Gui/CommandCreateGeo.cpp:330). Tooltip and
         // shortcut preserved from FreeCAD's sToolTipText / sAccel.

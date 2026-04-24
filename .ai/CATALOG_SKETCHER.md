@@ -19,7 +19,7 @@
 | 7 | CmdSketcherCreateArcOfHyperbola | Hyperbolic Arc | `addArcHyperbola(cx,cy,rx,ry,rot,startParam,endParam,construction=false)` | Draw.Arc group | **DONE** | shortcut `G, H`; test: test_drawing_arc_hyperbola.cpp |
 | 8 | CmdSketcherCreateArcOfParabola | Parabolic Arc | `addArcParabola(vx,vy,focal,rot,startParam,endParam,construction=false)` | Draw.Arc group | **DONE** | shortcut `G, J`; test: test_drawing_arc_parabola.cpp (rotation param accepted but uses default axis — aligned-axis parity only) |
 | 9 | CmdSketcherCreateCircle | Circle From Center | `addCircle(cx,cy,r,construction=false)` | Draw.Circle | **DONE** | shortcut `G, C`; test: test_drawing_circle.cpp |
-| 10 | CmdSketcherCreate3PointCircle | Circle From 3 Points | `addCircle3Point(p1,p2,p3)` | Draw.Circle | TODO | |
+| 10 | CmdSketcherCreate3PointCircle | Circle From 3 Points | `addCircle3Point(p1,p2,p3,construction=false)` | Draw.Circle | **DONE** | shortcut `G, 3, C`; OCCT GC_MakeCircle; test: test_drawing_circle3point.cpp |
 | 11 | CmdSketcherCreateEllipseByCenter | Ellipse From Center | `addEllipseCenter(cx,cy,rx,ry,rot)` | Draw.Conic | TODO | |
 | 12 | CmdSketcherCreateEllipseBy3Points | Ellipse From 3 Points | `addEllipse3Point(...)` | Draw.Conic | TODO | |
 | 13 | CmdSketcherCreateRectangle | Rectangle | `addRectangle(x1,y1,x2,y2)` | Draw.Rect | TODO | existing; needs H/V constraints per FreeCAD logic |
@@ -287,7 +287,7 @@ TEST(SketchSmoke, FullProfile) {
 ## Progress Dashboard (updated by executor)
 
 **Sub-phase completion:**
-- [ ] 1A — Drawing Geometry (9/45)
+- [ ] 1A — Drawing Geometry (10/45)
 - [ ] 1B — Geometric Constraints (0/11)
 - [ ] 1C — Dimensional Constraints (0/9)
 - [ ] 1D — Constraint Management (0/18)
@@ -298,7 +298,7 @@ TEST(SketchSmoke, FullProfile) {
 - [ ] 1I — Sketch Operations (0/13)
 - [ ] 1J — View + Display (0/6)
 
-**Phase 1 total: 9/161 tools DONE**
+**Phase 1 total: 10/161 tools DONE**
 
 ---
 

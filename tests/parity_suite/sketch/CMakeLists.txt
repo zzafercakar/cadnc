@@ -17,6 +17,7 @@ set(PARITY_SKETCH_SOURCES
     test_drawing_arc_hyperbola.cpp # Tool #7 — CmdSketcherCreateArcOfHyperbola
     test_drawing_arc_parabola.cpp  # Tool #8 — CmdSketcherCreateArcOfParabola
     test_drawing_circle.cpp        # Tool #9 — CmdSketcherCreateCircle
+    test_drawing_circle3point.cpp  # Tool #10 — CmdSketcherCreate3PointCircle
     # ... etc.
 )
 

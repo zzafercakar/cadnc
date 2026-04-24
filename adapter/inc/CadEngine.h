@@ -194,6 +194,10 @@ public:
     Q_INVOKABLE int addArcParabola(double vx, double vy, double focal,
                                     double rotationDeg,
                                     double startParam, double endParam);
+    /// Circle from three points on its circumference.
+    Q_INVOKABLE int addCircle3Point(double x1, double y1,
+                                     double x2, double y2,
+                                     double x3, double y3);
     Q_INVOKABLE int addRectangle(double x1, double y1, double x2, double y2);
     Q_INVOKABLE int addPoint(double x, double y);
     Q_INVOKABLE int addEllipse(double cx, double cy, double majorR, double minorR, double angleDeg = 0);

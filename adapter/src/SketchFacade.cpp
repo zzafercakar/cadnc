@@ -11,6 +11,8 @@
 
 #include <QCoreApplication>
 #include <GC_MakeArcOfCircle.hxx>
+#include <GC_MakeCircle.hxx>
+#include <Geom_Circle.hxx>
 #include <Geom_TrimmedCurve.hxx>
 #include <Standard_Failure.hxx>
 #include <gp_Pnt.hxx>
@@ -198,6 +200,24 @@ int SketchFacade::addArcParabola(Point2D vertex, double focal, double rotation,
         geo->setRange(startParam, endParam, /*emulateCCWXY=*/true);
         return impl_->sketch->addGeometry(geo.release(), construction);
     CADNC_SKETCH_FACADE_CATCH("addArcParabola")
+}
+
+int SketchFacade::addCircle3Point(Point2D p1, Point2D p2, Point2D p3, bool construction)
+{
+    CADNC_SKETCH_FACADE_PRECHECK("addCircle3Point");
+    CADNC_SKETCH_FACADE_TRY("addCircle3Point")
+        GC_MakeCircle maker(gp_Pnt(p1.x, p1.y, 0),
+                             gp_Pnt(p2.x, p2.y, 0),
+                             gp_Pnt(p3.x, p3.y, 0));
+        if (!maker.IsDone()) {
+            throw FacadeError(FacadeError::Code::InvalidArgument,
+                QCoreApplication::translate("SketchFacade",
+                    "addCircle3Point: collinear or coincident points"));
+        }
+        auto geo = std::make_unique<Part::GeomCircle>();
+        geo->setHandle(maker.Value());
+        return impl_->sketch->addGeometry(geo.release(), construction);
+    CADNC_SKETCH_FACADE_CATCH("addCircle3Point")
 }
 
 int SketchFacade::addRectangle(Point2D p1, Point2D p2, bool construction)

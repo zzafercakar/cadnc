@@ -30,6 +30,7 @@ icons in CADNC is permitted provided:
 | resources/icons/sketcher/Sketcher_CreateHyperbolic_Arc.svg | src/Mod/Sketcher/Gui/Resources/icons/geometry/Sketcher_CreateHyperbolic_Arc.svg | unchanged |
 | resources/icons/sketcher/Sketcher_CreateParabolic_Arc.svg | src/Mod/Sketcher/Gui/Resources/icons/geometry/Sketcher_CreateParabolic_Arc.svg | unchanged |
 | resources/icons/sketcher/Sketcher_CreateCircle.svg | src/Mod/Sketcher/Gui/Resources/icons/geometry/Sketcher_CreateCircle.svg | unchanged |
+| resources/icons/sketcher/Sketcher_Create3PointCircle.svg | src/Mod/Sketcher/Gui/Resources/icons/geometry/Sketcher_Create3PointCircle.svg | unchanged |
 
 ## CADNC-Original Icons
 
