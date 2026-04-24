@@ -89,21 +89,39 @@ struct Registrar {
 
 namespace cadnc::test {
 
-/// Spins up a fresh CadSession + CadDocument + one XY sketch for a test.
+/// Per-test working set: fresh document + fresh sketch. The
+/// CadSession is intentionally *not* owned here — FreeCAD's
+/// BaseClass::init() asserts once per process, so the harness shares a
+/// single session across every registered test via sharedSession().
 struct SketchFixture {
-    std::unique_ptr<CADNC::CadSession> session;
     std::shared_ptr<CADNC::CadDocument> doc;
     std::shared_ptr<CADNC::SketchFacade> sketch;
 };
 
+inline CADNC::CadSession& sharedSession()
+{
+    static CADNC::CadSession session;
+    static const bool ready = []{
+        static int dummy_argc = 0;
+        static char* dummy_argv[1] = { nullptr };
+        return session.initialize(dummy_argc, dummy_argv);
+    }();
+    if (!ready) {
+        throw std::runtime_error("shared CadSession failed to initialize");
+    }
+    return session;
+}
+
 inline SketchFixture makeSketchFixture()
 {
+    static int docCounter = 0;
     SketchFixture fx;
-    fx.session = std::make_unique<CADNC::CadSession>();
-    static int dummy_argc = 0;
-    static char* dummy_argv[1] = { nullptr };
-    fx.session->initialize(dummy_argc, dummy_argv);
-    fx.doc = fx.session->newDocument("Test");
+    auto& session = sharedSession();
+    // Unique document name per test — avoids collisions when the
+    // shared session is reused and lets the harness clean-up order stay
+    // deterministic (FreeCAD tolerates many open documents).
+    const std::string docName = "ParityTest_" + std::to_string(++docCounter);
+    fx.doc    = session.newDocument(docName);
     fx.sketch = fx.doc->addSketch("Sketch", /*planeType=*/0);
     return fx;
 }

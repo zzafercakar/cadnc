@@ -38,7 +38,17 @@ Rectangle {
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/polyline.svg"; tipText: "Polyline (P)"; isActive: activeTool === "polyline"; activeColor: "#34D399"; onClicked: toolSelected("polyline") }
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/ellipse.svg"; tipText: "Ellipse (E)"; isActive: activeTool === "ellipse"; activeColor: "#34D399"; onClicked: toolSelected("ellipse") }
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/spline.svg"; tipText: "B-Spline (S)"; isActive: activeTool === "bspline"; activeColor: "#34D399"; onClicked: toolSelected("bspline") }
-        CadToolButton { iconPath: "qrc:/resources/icons/sketch/point.svg"; tipText: "Point"; isActive: activeTool === "point"; activeColor: "#34D399"; onClicked: toolSelected("point") }
+        // Tool #1 — Sketcher_CreatePoint (FreeCAD CmdSketcherCreatePoint
+        // at src/Mod/Sketcher/Gui/CommandCreateGeo.cpp:107). Tooltip and
+        // shortcut preserved from FreeCAD's sToolTipText / sAccel.
+        CadToolButton {
+            iconPath: "qrc:/resources/icons/sketcher/Sketcher_CreatePoint.svg"
+            tipText: qsTr("Creates a point") + " (G, Y)"
+            shortcut: "G, Y"
+            isActive: activeTool === "point"
+            activeColor: "#34D399"
+            onClicked: toolSelected("point")
+        }
 
         Rectangle { width: 1; height: 32; color: "#CBD5E1" }
 

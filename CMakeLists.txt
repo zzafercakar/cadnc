@@ -168,6 +168,7 @@ file(GLOB ICON_FILES CONFIGURE_DEPENDS
     resources/icons/cam/*.svg
     resources/icons/nesting/*.svg
     resources/icons/sketch/*.svg
+    resources/icons/sketcher/*.svg
     resources/icons/quickaccess/*.svg
     resources/logos/*.svg
     resources/logos/*.png

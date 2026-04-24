@@ -21,9 +21,7 @@ icons in CADNC is permitted provided:
 
 | CADNC Path | FreeCAD Source | Notes |
 |------------|----------------|-------|
-<!-- Populated per-tool during Phase 1-3. Format:
-| resources/icons/sketcher/Sketcher_CreateLine.svg | src/Mod/Sketcher/Gui/Resources/icons/Sketcher_CreateLine.svg | unchanged |
--->
+| resources/icons/sketcher/Sketcher_CreatePoint.svg | src/Mod/Sketcher/Gui/Resources/icons/geometry/Sketcher_CreatePoint.svg | unchanged |
 
 ## CADNC-Original Icons
 

@@ -14,6 +14,10 @@ Rectangle {
 
     property string iconPath: ""
     property string tipText: ""
+    /// FreeCAD-parity keyboard shortcut (QKeySequence-compatible). When
+    /// non-empty, pressing this sequence fires clicked() — matches the
+    /// behaviour of the equivalent FreeCAD Command's sAccel.
+    property string shortcut: ""
     property bool isActive: false
     property bool isDisabled: false
     property bool isToggle: false
@@ -21,6 +25,12 @@ Rectangle {
     property color activeColor: "#34D399"
 
     signal clicked()
+
+    Shortcut {
+        sequence: btn.shortcut
+        enabled: btn.shortcut.length > 0 && !btn.isDisabled && btn.visible
+        onActivated: btn.clicked()
+    }
 
     opacity: isDisabled ? 0.38 : 1.0
 

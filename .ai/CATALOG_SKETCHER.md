@@ -10,7 +10,7 @@
 
 | # | FreeCAD Command | UI Label | Adapter Method | QML Handler | Status | Notes |
 |---|-----------------|----------|----------------|-------------|--------|-------|
-| 1 | CmdSketcherCreatePoint | Point | `addPoint(x,y)` | SketchToolbar Draw.Point | TODO | |
+| 1 | CmdSketcherCreatePoint | Point | `addPoint(x,y)` | SketchToolbar Draw.Point | **DONE** | shortcut `G, Y`; test: test_drawing_point.cpp |
 | 2 | CmdSketcherCreateLine | Line | `addLine(x1,y1,x2,y2,construction=false)` | SketchToolbar Draw.Line | TODO | already partial |
 | 3 | CmdSketcherCreatePolyline | Polyline | `addPolyline(points[], segmentModes[])` | SketchToolbar Draw.Polyline | TODO | press M for mode switch |
 | 4 | CmdSketcherCreateArc | Arc From Center | `addArcCenter(cx,cy,r,startAng,endAng)` | Draw.Arc group | TODO | |
@@ -287,7 +287,7 @@ TEST(SketchSmoke, FullProfile) {
 ## Progress Dashboard (updated by executor)
 
 **Sub-phase completion:**
-- [ ] 1A — Drawing Geometry (0/45)
+- [ ] 1A — Drawing Geometry (1/45)
 - [ ] 1B — Geometric Constraints (0/11)
 - [ ] 1C — Dimensional Constraints (0/9)
 - [ ] 1D — Constraint Management (0/18)
@@ -298,7 +298,7 @@ TEST(SketchSmoke, FullProfile) {
 - [ ] 1I — Sketch Operations (0/13)
 - [ ] 1J — View + Display (0/6)
 
-**Phase 1 total: 0/161 tools DONE**
+**Phase 1 total: 1/161 tools DONE**
 
 ---
 
