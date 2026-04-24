@@ -807,6 +807,15 @@ void CadDocument::recompute()
     if (impl_->doc) impl_->doc->recompute();
 }
 
+void CadDocument::recomputeIfNeeded()
+{
+    if (!impl_->doc) return;
+    // FreeCAD's Document::isTouched() aggregates every DocumentObject's
+    // touched flag; a clean doc means nothing needs recomputing.
+    if (!impl_->doc->isTouched()) return;
+    impl_->doc->recompute();
+}
+
 // ── OBJ writer ──────────────────────────────────────────────────────
 // Wavefront OBJ via OCCT tessellation. We refine the mesh with
 // BRepMesh_IncrementalMesh using a modest linear deflection (0.1mm)

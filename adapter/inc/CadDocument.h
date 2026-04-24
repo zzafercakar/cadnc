@@ -157,6 +157,12 @@ public:
     // ── Recompute ───────────────────────────────────────────────────
     void recompute();
 
+    /// Fast-path wrapper: skips the recompute call entirely if the
+    /// document has no touched objects. Per WRAPPER_CONTRACT § 2.6,
+    /// mutating facade/engine paths should prefer this over the
+    /// unconditional recompute().
+    void recomputeIfNeeded();
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
