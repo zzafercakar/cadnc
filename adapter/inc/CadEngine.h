@@ -183,6 +183,12 @@ public:
                                    double majorRadius, double minorRadius,
                                    double rotationDeg,
                                    double startAngleDeg, double endAngleDeg);
+    /// Hyperbolic arc — same scalar contract as addArcEllipse, angles are
+    /// hyperbolic parameters (not angles in the usual sense).
+    Q_INVOKABLE int addArcHyperbola(double cx, double cy,
+                                     double majorRadius, double minorRadius,
+                                     double rotationDeg,
+                                     double startParam, double endParam);
     Q_INVOKABLE int addRectangle(double x1, double y1, double x2, double y2);
     Q_INVOKABLE int addPoint(double x, double y);
     Q_INVOKABLE int addEllipse(double cx, double cy, double majorR, double minorR, double angleDeg = 0);

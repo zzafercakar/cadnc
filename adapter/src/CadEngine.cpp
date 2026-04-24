@@ -634,6 +634,25 @@ int CadEngine::addArcEllipse(double cx, double cy,
     } catch (const FacadeError& e) { setLastError(e.userMessage()); return -1; }
 }
 
+int CadEngine::addArcHyperbola(double cx, double cy,
+                                double majorRadius, double minorRadius,
+                                double rotationDeg,
+                                double startParam, double endParam)
+{
+    if (!activeSketch_) { setLastError(tr("No active sketch")); return -1; }
+    const double rot = rotationDeg * M_PI / 180.0;
+    try {
+        ScopedTransaction tx(document_.get(), "Add Arc (Hyperbola)");
+        int id = activeSketch_->addArcHyperbola({cx, cy}, majorRadius, minorRadius,
+                                                 rot, startParam, endParam);
+        tx.commit();
+        setLastError(QString());
+        Q_EMIT undoStateChanged();
+        refreshSketch();
+        return id;
+    } catch (const FacadeError& e) { setLastError(e.userMessage()); return -1; }
+}
+
 int CadEngine::addRectangle(double x1, double y1, double x2, double y2)
 {
     if (!activeSketch_) { setLastError(tr("No active sketch")); return -1; }

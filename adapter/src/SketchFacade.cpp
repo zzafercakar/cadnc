@@ -148,6 +148,29 @@ int SketchFacade::addArcEllipse(Point2D center, double majorRadius, double minor
     CADNC_SKETCH_FACADE_CATCH("addArcEllipse")
 }
 
+int SketchFacade::addArcHyperbola(Point2D center, double majorRadius, double minorRadius,
+                                   double rotation, double startAngle, double endAngle,
+                                   bool construction)
+{
+    CADNC_SKETCH_FACADE_PRECHECK("addArcHyperbola");
+    if (majorRadius < 1e-7 || minorRadius < 1e-7) {
+        throw FacadeError(FacadeError::Code::InvalidArgument,
+            QCoreApplication::translate("SketchFacade",
+                "addArcHyperbola: major and minor radii must be positive"));
+    }
+    CADNC_SKETCH_FACADE_TRY("addArcHyperbola")
+        auto geo = std::make_unique<Part::GeomArcOfHyperbola>();
+        geo->setCenter(Base::Vector3d(center.x, center.y, 0));
+        geo->setMajorRadius(majorRadius);
+        geo->setMinorRadius(minorRadius);
+        if (std::abs(rotation) > 1e-9) {
+            geo->setMajorAxisDir(Base::Vector3d(std::cos(rotation), std::sin(rotation), 0));
+        }
+        geo->setRange(startAngle, endAngle, /*emulateCCWXY=*/true);
+        return impl_->sketch->addGeometry(geo.release(), construction);
+    CADNC_SKETCH_FACADE_CATCH("addArcHyperbola")
+}
+
 int SketchFacade::addRectangle(Point2D p1, Point2D p2, bool construction)
 {
     CADNC_SKETCH_FACADE_PRECHECK("addRectangle");
@@ -614,6 +637,19 @@ std::vector<GeoInfo> SketchFacade::geometry() const
             info.angle = std::atan2(dir.y, dir.x);
             double s, e;
             ae->getRange(s, e, /*emulateCCWXY=*/true);
+            info.startAngle = s;
+            info.endAngle = e;
+        }
+        else if (auto* ah = dynamic_cast<const Part::GeomArcOfHyperbola*>(geos[i])) {
+            info.type = "ArcOfHyperbola";
+            auto ctr = ah->getCenter();
+            info.center = {ctr.x, ctr.y};
+            info.majorRadius = ah->getMajorRadius();
+            info.minorRadius = ah->getMinorRadius();
+            auto dir = ah->getMajorAxisDir();
+            info.angle = std::atan2(dir.y, dir.x);
+            double s, e;
+            ah->getRange(s, e, /*emulateCCWXY=*/true);
             info.startAngle = s;
             info.endAngle = e;
         }

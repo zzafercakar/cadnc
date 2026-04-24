@@ -115,6 +115,14 @@ public:
     int addArcEllipse(Point2D center, double majorRadius, double minorRadius,
                       double rotation, double startAngle, double endAngle,
                       bool construction = false);
+    /// Hyperbolic arc — centred at (cx, cy) with real-axis (a = major)
+    /// and imaginary-axis (b = minor) semi-radii, rotated by @p rotation
+    /// radians CCW from the +X axis, trimmed to parameter range
+    /// [@p startAngle, @p endAngle]. OCCT parametrises as (a·cosh t,
+    /// b·sinh t).
+    int addArcHyperbola(Point2D center, double majorRadius, double minorRadius,
+                        double rotation, double startAngle, double endAngle,
+                        bool construction = false);
     int addRectangle(Point2D p1, Point2D p2, bool construction = false);
     int addPoint(Point2D p, bool construction = false);
     int addEllipse(Point2D center, double majorRadius, double minorRadius,
