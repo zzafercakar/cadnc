@@ -1,7 +1,7 @@
 # CADNC — FreeCAD Parity Adoption Plan
 
 > **Architect of Record:** Claude (Opus 4.7) + zzafercakar
-> **Plan Version:** 2.0 — 2026-04-24 (tightened per user review)
+> **Plan Version:** 2.1 — 2026-04-24 (sub-phase 1-Zero executed; contract v1.1 relocates transactions & signals to engine)
 > **Execution Target:** Next session onwards
 > **Executor Protocol:** `superpowers:executing-plans`
 > **Status:** APPROVED — ready to execute
@@ -119,11 +119,71 @@ Summary: A tool is DONE only when it has (1) identified FreeCAD source, (2) anal
 - [x] CLAUDE.md rule "UI must not include FreeCAD headers" removed
 - [x] Reference paths updated to `FreeCAD-main-1-1-git/`
 
+### Sub-phase 1-Zero — Infrastructure Bootstrap **(DONE — 2026-04-24)**
+
+Unplanned-but-required pre-work discovered during plan review. The
+contract's 15-point DoD assumed primitives that did not yet exist in
+the adapter; starting Tool #1 (Point) would have silently mushroomed
+into an ~8-file infrastructure commit. Making the bootstrap an explicit
+sub-phase preserves the "one tool per commit" cadence from Tool #1
+onwards.
+
+**Deliverables (commit SHAs recorded in git log, prefix `*(1-zero)*`):**
+- [x] `adapter/inc/FacadeError.h` + `.cpp` — canonical error type with
+      Code enum (NoActiveDocument, ObjectNotFound, InvalidArgument,
+      ConstraintConflict, GeometryInvalid, FreeCADException,
+      OCCTException, StdException, PythonError, Unknown) and factory
+      methods `fromFreeCADException` / `fromOCCTException` /
+      `fromStdException`.
+- [x] `adapter/inc/ScopedTransaction.h` + `.cpp` — RAII wrapper with
+      explicit `commit()` / `rollback()`; destructor aborts if neither
+      ran. Replaces latent `TxScope` auto-commit bug for the migrated
+      methods.
+- [x] `CadDocument::recomputeIfNeeded()` — fast path using
+      `App::Document::isTouched()`.
+- [x] `CadEngine::errorOccurred(QString)` signal + `lastError`
+      Q_PROPERTY + private `setLastError()` helper.
+- [x] `tests/parity_suite/{CMakeLists.txt, sketch/CMakeLists.txt,
+      common/test_helpers.h}` — per-tool unit-test scaffold with
+      minimal assertion macros, test registry, and `makeSketchFixture()`
+      helper. No GoogleTest dependency.
+- [x] `resources/shortcuts.json` — empty skeleton with format docstring.
+- [x] `resources/icons/NOTICE.md` — LGPL-2.1+ attribution preamble.
+- [x] `ui/qml/dialogs/{drawing,constraints,features,cam}/` — placeholder
+      directories with .gitkeep so later tools land in the canonical spot.
+- [x] Eight pre-existing SketchFacade drawing methods refactored to the
+      FacadeError pattern; their CadEngine Q_INVOKABLE wrappers now use
+      explicit ScopedTransaction + try/catch(FacadeError).
+- [x] `WRAPPER_CONTRACT.md` v1.1 — transactions and signals relocated
+      from Facade to CadEngine; § 13 signature examples updated to
+      `Point2D`; remaining sections unchanged.
+- [x] `FREECAD_ADOPTION_PLAN.md` v2.1 — this sub-phase entry recorded.
+
+**Key decision (contract change):** v1.0 placed transactions and
+mutation signals inside facade methods. In practice, CadEngine already
+owned the `TxScope` RAII and all taxonomy signals (§ 3.2), and putting
+transactions deeper caused no practical benefit while blocking the
+facade from being test-harness-friendly. v1.1 keeps facades pure C++
+(they throw FacadeError) and concentrates all Qt + undo-history
+concerns on CadEngine. This is the documented deviation from plan v2.0
+executed during Sub-phase 1-Zero.
+
+**Not in scope** (deferred to the sub-phase that touches them):
+- Constraint-method refactor (Phase 1B): `addConstraint`, `addCoincident`,
+  `addDistance`, `addRadius`, `addAngle`, `addHorizontal`, `addVertical`,
+  `addFixed`, `addPointOnObject`, `addSymmetric` still use
+  `catch(...) return -1`. Migration happens per-tool as Phase 1B
+  enumerates them.
+- Other facade methods (trim, fillet, chamfer, extend, split, etc.)
+  refactored in their own sub-phase.
+- Remaining CadEngine methods still use the legacy auto-committing
+  `TxScope`. Migration follows the same per-tool cadence.
+
 ### Phase 1 — Sketch Parity (161 tools)
 
 **Goal:** Every Sketcher tool in FreeCAD works identically in CADNC. Full frontend (button + icon + tooltip + shortcut + TaskPanel) AND full backend (facade method + transaction + recompute + error handling + test).
 **Duration estimate:** 4-6 sessions (tool-per-commit cadence makes it slower but safer)
-**Depends on:** Phase 0
+**Depends on:** Sub-phase 1-Zero DONE, Phase 0 DONE
 **Catalog:** `.ai/CATALOG_SKETCHER.md`
 **Files modified (scope):**
 - `adapter/inc/SketchFacade.h`, `adapter/src/SketchFacade.cpp` (extended)

@@ -6,7 +6,7 @@
 >
 > **Authority:** This contract supersedes any conflicting guidance in CLAUDE.md, WORKPLAN.md, or in-code comments. Reviewers MUST reject PRs that violate this contract.
 >
-> **Version:** 1.0 — 2026-04-24
+> **Version:** 1.1 — 2026-04-24 (post sub-phase 1-Zero: transactions and signals relocated from Facade to CadEngine; facade methods now throw FacadeError only)
 
 ---
 
@@ -48,51 +48,73 @@
 
 ### 2.1 Required Pattern
 
-Every facade method follows this exact structure:
+**Responsibility split (v1.1):** Facade methods are pure, synchronous
+backend shims. They do **not** open transactions, do **not** recompute,
+and do **not** emit signals. Those responsibilities live on `CadEngine`
+(see § 3.1). A facade method only: (a) pre-checks preconditions,
+(b) validates inputs, (c) calls the FreeCAD API, (d) wraps any backend
+exception in `FacadeError`.
+
+**Facade body pattern:**
 
 ```cpp
 // Signature — must match this pattern
-[ReturnType] <Namespace>::<Method>(const <arg-types>&... args) noexcept(false);
+[ReturnType] <Facade>::<method>(<args>) noexcept(false);
 
-// Body — must follow this structure
 ReturnType Facade::method(args...) {
-    // 1. Precondition check — throw FacadeError if invalid
-    if (!document_ || !document_->isValid()) {
+    // 1. Precondition — throw FacadeError if backend object is missing.
+    if (!impl_->sketch) {
         throw FacadeError(FacadeError::Code::NoActiveDocument,
-                          "method() requires an active document");
+            QCoreApplication::translate("<Facade>",
+                "method() requires an active sketch"));
     }
 
-    // 2. Transaction open (for mutating methods only)
-    auto txn = document_->openTransaction("method-name");
+    // 2. Input validation — throw InvalidArgument for every rule.
+    if (<bad arg>) {
+        throw FacadeError(FacadeError::Code::InvalidArgument,
+            QCoreApplication::translate("<Facade>",
+                "method(): <describe violation>"));
+    }
 
-    // 3. FreeCAD call, wrapped in exception translation
-    ReturnType result;
+    // 3. Backend call under typed exception translation.
     try {
-        result = <direct FreeCAD call>;
+        return <direct FreeCAD call>;
     }
-    catch (const Base::Exception& e) {
-        txn.abort();
-        throw FacadeError::fromFreeCADException(e);
-    }
-    catch (const Standard_Failure& e) {  // OCCT exception
-        txn.abort();
-        throw FacadeError::fromOCCTException(e);
-    }
-    catch (const std::exception& e) {
-        txn.abort();
-        throw FacadeError::fromStdException(e);
-    }
-
-    // 4. Post-condition: recompute + emit change signal
-    document_->recomputeIfNeeded();
-    emit document_->mutated(<object-id>);
-
-    // 5. Commit
-    txn.commit();
-
-    return result;
+    catch (const FacadeError&) { throw; }
+    catch (const Base::Exception& e)   { throw FacadeError::fromFreeCADException(e); }
+    catch (const Standard_Failure& e)  { throw FacadeError::fromOCCTException(e); }
+    catch (const std::exception& e)    { throw FacadeError::fromStdException(e); }
 }
 ```
+
+**Engine wrapper pattern** (opens transaction, handles error, emits signals):
+
+```cpp
+Q_INVOKABLE int CadEngine::method(<primitive args>) {
+    if (!activeSketch_) { setLastError(tr("No active sketch")); return -1; }
+    try {
+        ScopedTransaction tx(document_.get(), "User-facing name");
+        int id = facade_->method(args);
+        tx.commit();                      // finalize into undo history
+        setLastError(QString());          // clear error state
+        Q_EMIT undoStateChanged();        // § 3.2 signal
+        refreshSketch();                  // drives sketchChanged / viewportDirty
+        return id;
+    }
+    catch (const FacadeError& e) {
+        setLastError(e.userMessage());    // emits errorOccurred(QString)
+        return -1;                         // ScopedTransaction dtor aborts
+    }
+}
+```
+
+**Rationale for the split:** the FreeCAD undo-history is a UI concern
+(transaction names appear in the Edit menu). Facade methods are
+reusable across QML, tests, and potential headless scripts that may
+not want undo entries. Keeping transactions on CadEngine lets tests
+exercise the facade without polluting the undo stack and lets a future
+batch-script context open one coarse transaction around many facade
+calls.
 
 ### 2.2 Return Conventions
 
@@ -170,37 +192,54 @@ QML receives: `bool` return + `errorOccurred(QString)` signal. QML shows toast o
 
 ### 2.5 Transaction Rules
 
-Every mutating facade method opens an undo transaction:
+Every mutating **engine** method (Q_INVOKABLE) opens an undo transaction
+via `ScopedTransaction` (adapter/inc/ScopedTransaction.h):
 
 ```cpp
-auto txn = document_->openTransaction("Pad");
+ScopedTransaction tx(document_.get(), "Pad");
+int id = partFacade_->pad(args);  // may throw FacadeError
+tx.commit();                        // mandatory on success
 ```
 
 - Transaction name = user-facing operation name (appears in Undo menu)
-- `txn.commit()` on success — mandatory before return
-- `txn.abort()` on exception — mandatory in catch blocks
-- Nested transactions: outer-wins; inner is no-op
-- Batch operations (e.g., pattern of 10 copies) open ONE transaction for the whole batch
+- `tx.commit()` on success — mandatory before return
+- `tx.rollback()` optional; the destructor aborts if neither commit()
+  nor rollback() ran, so exception unwind is automatically clean
+- Nested transactions: outer-wins; inner is a no-op (FreeCAD semantics)
+- Batch operations (e.g., pattern of 10 copies) open ONE ScopedTransaction
+  for the whole batch at the engine level; inner facade calls do nothing.
+
+**Facade methods do NOT open transactions.** They rely on the engine
+wrapper or the test harness to establish transactional context.
 
 **Read-only methods (queries) do NOT open transactions.**
 
 ### 2.6 Recompute Rules
 
-After any mutating call, the document must recompute before return:
+After any mutating engine call, the document must recompute before the
+Q_INVOKABLE returns to QML. The CadEngine wrapper does this via
+`refreshSketch()` (for sketch-edit context) or direct
+`document_->recomputeIfNeeded()` (for part / cam context):
 
 ```cpp
-document_->recomputeIfNeeded();  // fast path if nothing changed; full recompute otherwise
+document_->recomputeIfNeeded();  // skips if App::Document::isTouched() == false
 ```
 
 **Exceptions (rare):**
-- Batch inserts where each element requires recompute but you want to amortize — use `document_->suspendRecompute()` / `document_->resumeRecompute()` around the batch
-- Still MUST recompute before returning to QML
+- Batch inserts where each element would trigger its own recompute —
+  wrap the engine batch method in `CadDocument::suspendRecompute()` /
+  `resumeRecompute()` (planned, not yet implemented in v1.1).
+- Still MUST recompute before returning to QML.
 
-**After recompute:**
-- Emit `document_->mutated(objectName)` for each modified object
-- Emit `CadEngine::featureTreeChanged()` if tree structure changed
-- Emit `CadEngine::sketchChanged()` if inside sketch edit mode
-- Emit `CadEngine::viewportDirty()` if shape bounds/geometry changed
+**After recompute (all emitted from CadEngine, not from Facade/Document):**
+- `Q_EMIT featureTreeChanged()` — tree structure changed
+- `Q_EMIT sketchChanged()` — geometry / constraints of the active sketch changed
+- `Q_EMIT undoStateChanged()` — any commit/abort that touches the undo stack
+- `Q_EMIT viewportDirty()` — 3D shape bounds or geometry changed (planned)
+
+**Rationale:** Signal ownership lives with the QObject that QML binds to
+(`CadEngine`). Facades and `CadDocument` stay plain C++ so tests and
+headless scripts can drive them without a QCoreApplication event loop.
 
 ---
 
@@ -718,18 +757,26 @@ int addLine(double x1, double y1, double x2, double y2, bool construction);
 
 ### SketchFacade (strict signatures)
 
+**Coordinate convention (v1.1):** The facade uses the `Point2D` POD
+(adapter/inc/SketchFacade.h) rather than `double x, double y` pairs.
+Q_INVOKABLE bridges in CadEngine still take primitives (QML-marshalling
+constraint); conversion happens at the engine boundary.
+
 ```cpp
-// Section: Drawing
-int addLine(double x1, double y1, double x2, double y2, bool construction);
-int addPoint(double x, double y);
-int addCircle(double cx, double cy, double radius);
-int addArcCenter(double cx, double cy, double radius,
-                  double startAngleRad, double endAngleRad);
-int addArc3Point(double x1, double y1,
-                  double x2, double y2,
-                  double x3, double y3);
-int addRectangle(double x1, double y1, double x2, double y2);
-int addBSpline(const QList<QPointF>& controlPoints, int degree = 3);
+// Section: Drawing — throw FacadeError on failure; transactions live in CadEngine.
+int addLine(Point2D p1, Point2D p2, bool construction = false);
+int addPoint(Point2D p, bool construction = false);
+int addCircle(Point2D center, double radius, bool construction = false);
+int addArc(Point2D center, double radius,
+            double startAngleRad, double endAngleRad,
+            bool construction = false);
+int addArc3Point(Point2D p1, Point2D p2, Point2D p3);
+int addRectangle(Point2D p1, Point2D p2, bool construction = false);
+int addEllipse(Point2D center, double majorRadius, double minorRadius,
+                double angle = 0.0, bool construction = false);
+int addBSpline(const std::vector<Point2D>& poles, int degree = 3,
+                bool periodic = false, bool construction = false);
+int addPolyline(const std::vector<Point2D>& points, bool construction = false);
 
 // Section: Constraints — Geometric
 int constrainHorizontal(const QList<int>& geoIds);
