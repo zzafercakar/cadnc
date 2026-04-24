@@ -322,6 +322,9 @@ if(CADNC_BUILD_TESTS AND CADNC_ENABLE_FREECAD_BACKEND)
     # Part flow test disabled — second App::Application instance causes
     # PyException in destructor. Pad test merged into adapter_test instead.
     # TODO: investigate test isolation for separate PartDesign test binary
+
+    # ── Parity test suite (per-tool tests, populated Phase 1-3) ─────
+    add_subdirectory(tests/parity_suite)
 endif()
 
 install(TARGETS cadnc DESTINATION bin)

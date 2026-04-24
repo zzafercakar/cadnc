@@ -1,0 +1,2 @@
+# Placeholder for drawing-tool parameter dialogs (Phase 1A).
+# Each tool that takes parameters gets its own <Tool>Dialog.qml here.
