@@ -6,6 +6,7 @@
         "Sketcher_CreateLine": "G, L",
         "Sketcher_CreatePolyline": "G, M",
         "Sketcher_CreateArc": "G, A",
-        "Sketcher_Create3PointArc": "G, 3, A"
+        "Sketcher_Create3PointArc": "G, 3, A",
+        "Sketcher_CreateArcOfEllipse": "G, E, A"
     }
 }

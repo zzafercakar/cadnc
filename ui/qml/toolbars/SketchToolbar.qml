@@ -65,6 +65,16 @@ Rectangle {
             activeColor: "#34D399"
             onClicked: toolSelected("arc3point")
         }
+        // Tool #6 — Sketcher_CreateArcOfEllipse (FreeCAD
+        // CmdSketcherCreateArcOfEllipse at CommandCreateGeo.cpp:398).
+        CadToolButton {
+            iconPath: "qrc:/resources/icons/sketcher/Sketcher_CreateElliptical_Arc.svg"
+            tipText: qsTr("Creates an elliptical arc") + " (G, E, A)"
+            shortcut: "G, E, A"
+            isActive: activeTool === "arcEllipse"
+            activeColor: "#34D399"
+            onClicked: toolSelected("arcEllipse")
+        }
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/rect.svg"; tipText: "Rectangle (R)"; isActive: activeTool === "rectangle"; activeColor: "#34D399"; onClicked: toolSelected("rectangle") }
         // Tool #3 — Sketcher_CreatePolyline (FreeCAD CmdSketcherCreatePolyline
         // at src/Mod/Sketcher/Gui/CommandCreateGeo.cpp:225). Tooltip and

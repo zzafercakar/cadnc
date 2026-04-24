@@ -15,7 +15,7 @@
 | 3 | CmdSketcherCreatePolyline | Polyline | `addPolyline(points[], construction=false)` | SketchToolbar Draw.Polyline | **DONE** | shortcut `G, M`; test: test_drawing_polyline.cpp (segment-mode switching deferred to DrawSketchHandlerLineSet port) |
 | 4 | CmdSketcherCreateArc | Arc From Center | `addArc(cx,cy,r,startAng,endAng,construction=false)` | Draw.Arc group | **DONE** | shortcut `G, A`; test: test_drawing_arc.cpp |
 | 5 | CmdSketcherCreate3PointArc | Arc From 3 Points | `addArc3Point(p1,p2,p3,construction=false)` | Draw.Arc group | **DONE** | shortcut `G, 3, A`; OCCT GC_MakeArcOfCircle; test: test_drawing_arc3point.cpp |
-| 6 | CmdSketcherCreateArcOfEllipse | Elliptical Arc | `addArcEllipse(cx,cy,rx,ry,rot,startAng,endAng)` | Draw.Arc group | TODO | |
+| 6 | CmdSketcherCreateArcOfEllipse | Elliptical Arc | `addArcEllipse(cx,cy,rx,ry,rot,startAng,endAng,construction=false)` | Draw.Arc group | **DONE** | shortcut `G, E, A`; test: test_drawing_arc_ellipse.cpp |
 | 7 | CmdSketcherCreateArcOfHyperbola | Hyperbolic Arc | `addArcHyperbola(...)` | Draw.Arc group | TODO | |
 | 8 | CmdSketcherCreateArcOfParabola | Parabolic Arc | `addArcParabola(...)` | Draw.Arc group | TODO | |
 | 9 | CmdSketcherCreateCircle | Circle From Center | `addCircle(cx,cy,r)` | Draw.Circle | TODO | partial exists |
@@ -287,7 +287,7 @@ TEST(SketchSmoke, FullProfile) {
 ## Progress Dashboard (updated by executor)
 
 **Sub-phase completion:**
-- [ ] 1A — Drawing Geometry (5/45)
+- [ ] 1A — Drawing Geometry (6/45)
 - [ ] 1B — Geometric Constraints (0/11)
 - [ ] 1C — Dimensional Constraints (0/9)
 - [ ] 1D — Constraint Management (0/18)
@@ -298,7 +298,7 @@ TEST(SketchSmoke, FullProfile) {
 - [ ] 1I — Sketch Operations (0/13)
 - [ ] 1J — View + Display (0/6)
 
-**Phase 1 total: 5/161 tools DONE**
+**Phase 1 total: 6/161 tools DONE**
 
 ---
 

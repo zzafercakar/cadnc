@@ -13,6 +13,7 @@ set(PARITY_SKETCH_SOURCES
     test_drawing_polyline.cpp      # Tool #3 — CmdSketcherCreatePolyline
     test_drawing_arc.cpp           # Tool #4 — CmdSketcherCreateArc
     test_drawing_arc3point.cpp     # Tool #5 — CmdSketcherCreate3PointArc
+    test_drawing_arc_ellipse.cpp   # Tool #6 — CmdSketcherCreateArcOfEllipse
     # ... etc.
 )
 

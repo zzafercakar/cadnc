@@ -121,6 +121,33 @@ int SketchFacade::addArc3Point(Point2D p1, Point2D p2, Point2D p3, bool construc
     CADNC_SKETCH_FACADE_CATCH("addArc3Point")
 }
 
+int SketchFacade::addArcEllipse(Point2D center, double majorRadius, double minorRadius,
+                                 double rotation, double startAngle, double endAngle,
+                                 bool construction)
+{
+    CADNC_SKETCH_FACADE_PRECHECK("addArcEllipse");
+    if (majorRadius < 1e-7 || minorRadius < 1e-7) {
+        throw FacadeError(FacadeError::Code::InvalidArgument,
+            QCoreApplication::translate("SketchFacade",
+                "addArcEllipse: major and minor radii must be positive"));
+    }
+    CADNC_SKETCH_FACADE_TRY("addArcEllipse")
+        // Part::GeomArcOfEllipse default-constructs a unit ellipse; we
+        // set its parameters exactly as addEllipse does, then setRange
+        // to trim. OCCT invariant major >= minor is preserved via
+        // max/min swap — same normalisation pattern as addEllipse above.
+        auto geo = std::make_unique<Part::GeomArcOfEllipse>();
+        geo->setCenter(Base::Vector3d(center.x, center.y, 0));
+        geo->setMajorRadius(std::max(majorRadius, minorRadius));
+        geo->setMinorRadius(std::min(majorRadius, minorRadius));
+        if (std::abs(rotation) > 1e-9) {
+            geo->setMajorAxisDir(Base::Vector3d(std::cos(rotation), std::sin(rotation), 0));
+        }
+        geo->setRange(startAngle, endAngle, /*emulateCCWXY=*/true);
+        return impl_->sketch->addGeometry(geo.release(), construction);
+    CADNC_SKETCH_FACADE_CATCH("addArcEllipse")
+}
+
 int SketchFacade::addRectangle(Point2D p1, Point2D p2, bool construction)
 {
     CADNC_SKETCH_FACADE_PRECHECK("addRectangle");
@@ -576,6 +603,19 @@ std::vector<GeoInfo> SketchFacade::geometry() const
             info.minorRadius = el->getMinorRadius();
             auto dir = el->getMajorAxisDir();
             info.angle = std::atan2(dir.y, dir.x);
+        }
+        else if (auto* ae = dynamic_cast<const Part::GeomArcOfEllipse*>(geos[i])) {
+            info.type = "ArcOfEllipse";
+            auto ctr = ae->getCenter();
+            info.center = {ctr.x, ctr.y};
+            info.majorRadius = ae->getMajorRadius();
+            info.minorRadius = ae->getMinorRadius();
+            auto dir = ae->getMajorAxisDir();
+            info.angle = std::atan2(dir.y, dir.x);
+            double s, e;
+            ae->getRange(s, e, /*emulateCCWXY=*/true);
+            info.startAngle = s;
+            info.endAngle = e;
         }
         else if (auto* bs = dynamic_cast<const Part::GeomBSplineCurve*>(geos[i])) {
             info.type = "BSpline";

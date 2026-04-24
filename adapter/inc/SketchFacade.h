@@ -107,6 +107,14 @@ public:
     /// FacadeError::InvalidArgument if the three points are collinear or
     /// coincident (OCCT GC_MakeArcOfCircle cannot build a unique arc).
     int addArc3Point(Point2D p1, Point2D p2, Point2D p3, bool construction = false);
+    /// Elliptical arc centred at (cx, cy) with semi-axes (rx, ry), the
+    /// major axis rotated by @p rotation radians CCW from the +X axis,
+    /// and angular span [@p startAngle, @p endAngle] measured in the
+    /// local ellipse parameter (radians). OCCT requires major >= minor;
+    /// the facade normalises by swapping if needed.
+    int addArcEllipse(Point2D center, double majorRadius, double minorRadius,
+                      double rotation, double startAngle, double endAngle,
+                      bool construction = false);
     int addRectangle(Point2D p1, Point2D p2, bool construction = false);
     int addPoint(Point2D p, bool construction = false);
     int addEllipse(Point2D center, double majorRadius, double minorRadius,
