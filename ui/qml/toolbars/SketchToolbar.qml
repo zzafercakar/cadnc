@@ -31,7 +31,17 @@ Rectangle {
         Rectangle { width: 1; height: 32; color: "#CBD5E1" }
 
         // Draw
-        CadToolButton { iconPath: "qrc:/resources/icons/sketch/line.svg"; tipText: "Line (L)"; isActive: activeTool === "line"; activeColor: "#34D399"; onClicked: toolSelected("line") }
+        // Tool #2 — Sketcher_CreateLine (FreeCAD CmdSketcherCreateLine
+        // at src/Mod/Sketcher/Gui/CommandCreateGeo.cpp:194). Tooltip and
+        // shortcut preserved from FreeCAD's sToolTipText / sAccel.
+        CadToolButton {
+            iconPath: "qrc:/resources/icons/sketcher/Sketcher_CreateLine.svg"
+            tipText: qsTr("Creates a line") + " (G, L)"
+            shortcut: "G, L"
+            isActive: activeTool === "line"
+            activeColor: "#34D399"
+            onClicked: toolSelected("line")
+        }
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/circle.svg"; tipText: "Circle (C)"; isActive: activeTool === "circle"; activeColor: "#34D399"; onClicked: toolSelected("circle") }
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/arc.svg"; tipText: "Arc (A)"; isActive: activeTool === "arc"; activeColor: "#34D399"; onClicked: toolSelected("arc") }
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/rect.svg"; tipText: "Rectangle (R)"; isActive: activeTool === "rectangle"; activeColor: "#34D399"; onClicked: toolSelected("rectangle") }

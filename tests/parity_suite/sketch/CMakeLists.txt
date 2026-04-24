@@ -9,7 +9,7 @@
 set(PARITY_SKETCH_SOURCES
     main.cpp
     test_drawing_point.cpp         # Tool #1 — CmdSketcherCreatePoint
-    # test_drawing_line.cpp        # Tool #2 (pending)
+    test_drawing_line.cpp          # Tool #2 — CmdSketcherCreateLine
     # ... etc.
 )
 
