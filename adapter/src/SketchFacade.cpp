@@ -10,7 +10,10 @@
 #include <Mod/Sketcher/App/GeometryFacade.h>
 
 #include <QCoreApplication>
+#include <GC_MakeArcOfCircle.hxx>
+#include <Geom_TrimmedCurve.hxx>
 #include <Standard_Failure.hxx>
+#include <gp_Pnt.hxx>
 
 #include <memory>
 #include <cmath>
@@ -94,6 +97,28 @@ int SketchFacade::addArc(Point2D center, double radius,
         geo->setRange(startAngle, endAngle, true);
         return impl_->sketch->addGeometry(geo.release(), construction);
     CADNC_SKETCH_FACADE_CATCH("addArc")
+}
+
+int SketchFacade::addArc3Point(Point2D p1, Point2D p2, Point2D p3, bool construction)
+{
+    CADNC_SKETCH_FACADE_PRECHECK("addArc3Point");
+    CADNC_SKETCH_FACADE_TRY("addArc3Point")
+        // OCCT's GC_MakeArcOfCircle handles the circumcircle math and the
+        // arc orientation (p1→p2→p3). IsDone() returns false when the
+        // three points are collinear or any two coincide — translate to
+        // InvalidArgument so QML/tests see a consistent failure code.
+        GC_MakeArcOfCircle maker(gp_Pnt(p1.x, p1.y, 0),
+                                  gp_Pnt(p2.x, p2.y, 0),
+                                  gp_Pnt(p3.x, p3.y, 0));
+        if (!maker.IsDone()) {
+            throw FacadeError(FacadeError::Code::InvalidArgument,
+                QCoreApplication::translate("SketchFacade",
+                    "addArc3Point: collinear or coincident points"));
+        }
+        auto geo = std::make_unique<Part::GeomArcOfCircle>();
+        geo->setHandle(maker.Value());
+        return impl_->sketch->addGeometry(geo.release(), construction);
+    CADNC_SKETCH_FACADE_CATCH("addArc3Point")
 }
 
 int SketchFacade::addRectangle(Point2D p1, Point2D p2, bool construction)

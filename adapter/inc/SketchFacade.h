@@ -102,6 +102,11 @@ public:
     int addCircle(Point2D center, double radius, bool construction = false);
     int addArc(Point2D center, double radius,
                double startAngle, double endAngle, bool construction = false);
+    /// Arc from three points on its rim: (p1, p2, p3) where p1 and p3 are
+    /// the endpoints and p2 is a point on the arc between them. Throws
+    /// FacadeError::InvalidArgument if the three points are collinear or
+    /// coincident (OCCT GC_MakeArcOfCircle cannot build a unique arc).
+    int addArc3Point(Point2D p1, Point2D p2, Point2D p3, bool construction = false);
     int addRectangle(Point2D p1, Point2D p2, bool construction = false);
     int addPoint(Point2D p, bool construction = false);
     int addEllipse(Point2D center, double majorRadius, double minorRadius,

@@ -54,6 +54,17 @@ Rectangle {
             activeColor: "#34D399"
             onClicked: toolSelected("arc")
         }
+        // Tool #5 — Sketcher_Create3PointArc (FreeCAD CmdSketcherCreate3PointArc
+        // at src/Mod/Sketcher/Gui/CommandCreateGeo.cpp:362). Shares the
+        // DrawSketchHandlerArc backend via ThreeRim construction method.
+        CadToolButton {
+            iconPath: "qrc:/resources/icons/sketcher/Sketcher_Create3PointArc.svg"
+            tipText: qsTr("Creates an arc defined by 2 end points and 1 point on the arc") + " (G, 3, A)"
+            shortcut: "G, 3, A"
+            isActive: activeTool === "arc3point"
+            activeColor: "#34D399"
+            onClicked: toolSelected("arc3point")
+        }
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/rect.svg"; tipText: "Rectangle (R)"; isActive: activeTool === "rectangle"; activeColor: "#34D399"; onClicked: toolSelected("rectangle") }
         // Tool #3 — Sketcher_CreatePolyline (FreeCAD CmdSketcherCreatePolyline
         // at src/Mod/Sketcher/Gui/CommandCreateGeo.cpp:225). Tooltip and

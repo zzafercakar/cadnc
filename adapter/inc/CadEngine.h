@@ -173,6 +173,10 @@ public:
     Q_INVOKABLE int addCircle(double cx, double cy, double radius);
     Q_INVOKABLE int addArc(double cx, double cy, double radius,
                            double startAngle, double endAngle);
+    /// Arc from three points (p1 = start, p2 = mid, p3 = end).
+    Q_INVOKABLE int addArc3Point(double x1, double y1,
+                                  double x2, double y2,
+                                  double x3, double y3);
     Q_INVOKABLE int addRectangle(double x1, double y1, double x2, double y2);
     Q_INVOKABLE int addPoint(double x, double y);
     Q_INVOKABLE int addEllipse(double cx, double cy, double majorR, double minorR, double angleDeg = 0);

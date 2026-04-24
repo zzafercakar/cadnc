@@ -5,6 +5,7 @@
         "Sketcher_CreatePoint": "G, Y",
         "Sketcher_CreateLine": "G, L",
         "Sketcher_CreatePolyline": "G, M",
-        "Sketcher_CreateArc": "G, A"
+        "Sketcher_CreateArc": "G, A",
+        "Sketcher_Create3PointArc": "G, 3, A"
     }
 }
