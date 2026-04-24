@@ -1,6 +1,8 @@
 #include "CadEngine.h"
 #include "CadSession.h"
 #include "CadDocument.h"
+#include "FacadeError.h"
+#include "ScopedTransaction.h"
 #include "SketchFacade.h"
 #include "PartFacade.h"
 #include "CamFacade.h"
@@ -552,88 +554,137 @@ void CadEngine::closeSketch()
 
 int CadEngine::addLine(double x1, double y1, double x2, double y2)
 {
-    if (!activeSketch_) return -1;
-    TxScope tx(this, "Add Line");
-    int id = activeSketch_->addLine({x1, y1}, {x2, y2});
-    refreshSketch();
-    return id;
+    if (!activeSketch_) { setLastError(tr("No active sketch")); return -1; }
+    try {
+        ScopedTransaction tx(document_.get(), "Add Line");
+        int id = activeSketch_->addLine({x1, y1}, {x2, y2});
+        tx.commit();
+        setLastError(QString());
+        Q_EMIT undoStateChanged();
+        refreshSketch();
+        return id;
+    } catch (const FacadeError& e) { setLastError(e.userMessage()); return -1; }
 }
 
 int CadEngine::addCircle(double cx, double cy, double radius)
 {
-    if (!activeSketch_) return -1;
-    TxScope tx(this, "Add Circle");
-    int id = activeSketch_->addCircle({cx, cy}, radius);
-    refreshSketch();
-    return id;
+    if (!activeSketch_) { setLastError(tr("No active sketch")); return -1; }
+    try {
+        ScopedTransaction tx(document_.get(), "Add Circle");
+        int id = activeSketch_->addCircle({cx, cy}, radius);
+        tx.commit();
+        setLastError(QString());
+        Q_EMIT undoStateChanged();
+        refreshSketch();
+        return id;
+    } catch (const FacadeError& e) { setLastError(e.userMessage()); return -1; }
 }
 
 int CadEngine::addArc(double cx, double cy, double radius,
                       double startAngle, double endAngle)
 {
-    if (!activeSketch_) return -1;
-    TxScope tx(this, "Add Arc");
-    double sa = startAngle * M_PI / 180.0;
-    double ea = endAngle * M_PI / 180.0;
-    int id = activeSketch_->addArc({cx, cy}, radius, sa, ea);
-    refreshSketch();
-    return id;
+    if (!activeSketch_) { setLastError(tr("No active sketch")); return -1; }
+    const double sa = startAngle * M_PI / 180.0;
+    const double ea = endAngle   * M_PI / 180.0;
+    try {
+        ScopedTransaction tx(document_.get(), "Add Arc");
+        int id = activeSketch_->addArc({cx, cy}, radius, sa, ea);
+        tx.commit();
+        setLastError(QString());
+        Q_EMIT undoStateChanged();
+        refreshSketch();
+        return id;
+    } catch (const FacadeError& e) { setLastError(e.userMessage()); return -1; }
 }
 
 int CadEngine::addRectangle(double x1, double y1, double x2, double y2)
 {
-    if (!activeSketch_) return -1;
-    TxScope tx(this, "Add Rectangle");
-    int id = activeSketch_->addRectangle({x1, y1}, {x2, y2});
-    refreshSketch();
-    return id;
+    if (!activeSketch_) { setLastError(tr("No active sketch")); return -1; }
+    try {
+        ScopedTransaction tx(document_.get(), "Add Rectangle");
+        int id = activeSketch_->addRectangle({x1, y1}, {x2, y2});
+        tx.commit();
+        setLastError(QString());
+        Q_EMIT undoStateChanged();
+        refreshSketch();
+        return id;
+    } catch (const FacadeError& e) { setLastError(e.userMessage()); return -1; }
 }
 
 int CadEngine::addPoint(double x, double y)
 {
-    if (!activeSketch_) return -1;
-    TxScope tx(this, "Add Point");
-    int id = activeSketch_->addPoint({x, y});
-    refreshSketch();
-    return id;
+    if (!activeSketch_) { setLastError(tr("No active sketch")); return -1; }
+    try {
+        ScopedTransaction tx(document_.get(), "Add Point");
+        int id = activeSketch_->addPoint({x, y});
+        tx.commit();
+        setLastError(QString());
+        Q_EMIT undoStateChanged();
+        refreshSketch();
+        return id;
+    } catch (const FacadeError& e) { setLastError(e.userMessage()); return -1; }
 }
 
 int CadEngine::addEllipse(double cx, double cy, double majorR, double minorR, double angleDeg)
 {
-    if (!activeSketch_) return -1;
-    TxScope tx(this, "Add Ellipse");
-    double angleRad = angleDeg * M_PI / 180.0;
-    int id = activeSketch_->addEllipse({cx, cy}, majorR, minorR, angleRad);
-    refreshSketch();
-    return id;
+    if (!activeSketch_) { setLastError(tr("No active sketch")); return -1; }
+    const double angleRad = angleDeg * M_PI / 180.0;
+    try {
+        ScopedTransaction tx(document_.get(), "Add Ellipse");
+        int id = activeSketch_->addEllipse({cx, cy}, majorR, minorR, angleRad);
+        tx.commit();
+        setLastError(QString());
+        Q_EMIT undoStateChanged();
+        refreshSketch();
+        return id;
+    } catch (const FacadeError& e) { setLastError(e.userMessage()); return -1; }
 }
 
 int CadEngine::addBSpline(const QVariantList& points, int degree)
 {
-    if (!activeSketch_) return -1;
-    TxScope tx(this, "Add BSpline");
+    if (!activeSketch_) { setLastError(tr("No active sketch")); return -1; }
     std::vector<CADNC::Point2D> poles;
+    poles.reserve(points.size());
     for (const auto& pt : points) {
         auto map = pt.toMap();
         poles.push_back({map["x"].toDouble(), map["y"].toDouble()});
     }
-    int id = activeSketch_->addBSpline(poles, degree);
-    refreshSketch();
-    return id;
+    try {
+        ScopedTransaction tx(document_.get(), "Add BSpline");
+        int id = activeSketch_->addBSpline(poles, degree);
+        tx.commit();
+        setLastError(QString());
+        Q_EMIT undoStateChanged();
+        refreshSketch();
+        return id;
+    } catch (const FacadeError& e) { setLastError(e.userMessage()); return -1; }
 }
 
 int CadEngine::addPolyline(const QVariantList& points)
 {
-    if (!activeSketch_) return -1;
-    TxScope tx(this, "Add Polyline");
+    if (!activeSketch_) { setLastError(tr("No active sketch")); return -1; }
     std::vector<CADNC::Point2D> pts;
+    pts.reserve(points.size());
     for (const auto& pt : points) {
         auto map = pt.toMap();
         pts.push_back({map["x"].toDouble(), map["y"].toDouble()});
     }
-    int id = activeSketch_->addPolyline(pts);
-    refreshSketch();
-    return id;
+    try {
+        ScopedTransaction tx(document_.get(), "Add Polyline");
+        int id = activeSketch_->addPolyline(pts);
+        tx.commit();
+        setLastError(QString());
+        Q_EMIT undoStateChanged();
+        refreshSketch();
+        return id;
+    } catch (const FacadeError& e) { setLastError(e.userMessage()); return -1; }
+}
+
+void CadEngine::setLastError(const QString& message)
+{
+    if (lastError_ == message) return;
+    lastError_ = message;
+    if (!message.isEmpty()) Q_EMIT errorOccurred(message);
 }
 
 int CadEngine::toggleConstruction(int geoId)

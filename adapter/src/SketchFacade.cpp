@@ -1,5 +1,7 @@
 #include "SketchFacade.h"
+#include "FacadeError.h"
 
+#include <Base/Exception.h>
 #include <Base/Vector3D.h>
 #include <Mod/Sketcher/App/SketchObject.h>
 #include <Mod/Sketcher/App/Constraint.h>
@@ -7,8 +9,32 @@
 #include <Mod/Part/App/Geometry.h>
 #include <Mod/Sketcher/App/GeometryFacade.h>
 
+#include <QCoreApplication>
+#include <Standard_Failure.hxx>
+
 #include <memory>
 #include <cmath>
+
+// ── Helper macros ───────────────────────────────────────────────────
+// Per WRAPPER_CONTRACT § 2.3 — wrap backend exceptions in FacadeError
+// at the facade boundary so CadEngine/QML see a single error type.
+
+#define CADNC_SKETCH_FACADE_PRECHECK(method_name)                                 \
+    do {                                                                          \
+        if (!impl_->sketch) {                                                     \
+            throw FacadeError(FacadeError::Code::NoActiveDocument,                \
+                QCoreApplication::translate("SketchFacade",                       \
+                    method_name " requires an active sketch"));                   \
+        }                                                                         \
+    } while (0)
+
+#define CADNC_SKETCH_FACADE_TRY(method_name) try {
+
+#define CADNC_SKETCH_FACADE_CATCH(method_name)                                    \
+    } catch (const FacadeError&) { throw; }                                       \
+    catch (const Base::Exception& e) { throw FacadeError::fromFreeCADException(e); } \
+    catch (const Standard_Failure& e) { throw FacadeError::fromOCCTException(e); } \
+    catch (const std::exception& e) { throw FacadeError::fromStdException(e); }
 
 namespace CADNC {
 
@@ -28,55 +54,67 @@ SketchFacade::~SketchFacade() = default;
 
 int SketchFacade::addLine(Point2D p1, Point2D p2, bool construction)
 {
-    try {
+    CADNC_SKETCH_FACADE_PRECHECK("addLine");
+    CADNC_SKETCH_FACADE_TRY("addLine")
         auto geo = std::make_unique<Part::GeomLineSegment>();
         geo->setPoints(Base::Vector3d(p1.x, p1.y, 0), Base::Vector3d(p2.x, p2.y, 0));
         return impl_->sketch->addGeometry(geo.release(), construction);
-    } catch (...) { return -1; }
+    CADNC_SKETCH_FACADE_CATCH("addLine")
 }
 
 int SketchFacade::addCircle(Point2D center, double radius, bool construction)
 {
-    if (radius < 1e-7) return -1;  // reject degenerate
-    try {
+    CADNC_SKETCH_FACADE_PRECHECK("addCircle");
+    if (radius < 1e-7) {
+        throw FacadeError(FacadeError::Code::InvalidArgument,
+            QCoreApplication::translate("SketchFacade",
+                "addCircle: radius must be positive"));
+    }
+    CADNC_SKETCH_FACADE_TRY("addCircle")
         auto geo = std::make_unique<Part::GeomCircle>();
         geo->setCenter(Base::Vector3d(center.x, center.y, 0));
         geo->setRadius(radius);
         return impl_->sketch->addGeometry(geo.release(), construction);
-    } catch (...) { return -1; }
+    CADNC_SKETCH_FACADE_CATCH("addCircle")
 }
 
 int SketchFacade::addArc(Point2D center, double radius,
                          double startAngle, double endAngle, bool construction)
 {
-    if (radius < 1e-7) return -1;  // reject degenerate
-    try {
+    CADNC_SKETCH_FACADE_PRECHECK("addArc");
+    if (radius < 1e-7) {
+        throw FacadeError(FacadeError::Code::InvalidArgument,
+            QCoreApplication::translate("SketchFacade",
+                "addArc: radius must be positive"));
+    }
+    CADNC_SKETCH_FACADE_TRY("addArc")
         auto geo = std::make_unique<Part::GeomArcOfCircle>();
         geo->setCenter(Base::Vector3d(center.x, center.y, 0));
         geo->setRadius(radius);
         geo->setRange(startAngle, endAngle, true);
         return impl_->sketch->addGeometry(geo.release(), construction);
-    } catch (...) { return -1; }
+    CADNC_SKETCH_FACADE_CATCH("addArc")
 }
 
 int SketchFacade::addRectangle(Point2D p1, Point2D p2, bool construction)
 {
-    // Reject degenerate rectangle (zero area causes solver issues)
-    if (std::abs(p1.x - p2.x) < 1e-7 || std::abs(p1.y - p2.y) < 1e-7)
-        return -1;
-
-    try {
-        // Rectangle = 4 lines + 4 coincident constraints
+    CADNC_SKETCH_FACADE_PRECHECK("addRectangle");
+    if (std::abs(p1.x - p2.x) < 1e-7 || std::abs(p1.y - p2.y) < 1e-7) {
+        throw FacadeError(FacadeError::Code::InvalidArgument,
+            QCoreApplication::translate("SketchFacade",
+                "addRectangle: degenerate rectangle (zero area)"));
+    }
+    CADNC_SKETCH_FACADE_TRY("addRectangle")
+        // Rectangle = 4 lines + 4 coincident constraints. addLine now throws
+        // on failure — the enclosing transaction (opened by the engine)
+        // rolls back any partial geometry on exception unwind.
         int id0 = addLine(p1, {p2.x, p1.y}, construction);
         int id1 = addLine({p2.x, p1.y}, p2, construction);
         int id2 = addLine(p2, {p1.x, p2.y}, construction);
         int id3 = addLine({p1.x, p2.y}, p1, construction);
 
-        if (id0 < 0 || id1 < 0 || id2 < 0 || id3 < 0)
-            return id0;  // partial — skip constraints
-
         // Close corners with coincident constraints
-        addCoincident(id0, 2, id1, 1); // end of L0 = start of L1
+        addCoincident(id0, 2, id1, 1);
         addCoincident(id1, 2, id2, 1);
         addCoincident(id2, 2, id3, 1);
         addCoincident(id3, 2, id0, 1);
@@ -91,22 +129,28 @@ int SketchFacade::addRectangle(Point2D p1, Point2D p2, bool construction)
         addVertical(id3);
 
         return id0;
-    } catch (...) {
-        return -1;
-    }
+    CADNC_SKETCH_FACADE_CATCH("addRectangle")
 }
 
 int SketchFacade::addPoint(Point2D p, bool construction)
 {
-    auto geo = std::make_unique<Part::GeomPoint>(Base::Vector3d(p.x, p.y, 0));
-    return impl_->sketch->addGeometry(geo.release(), construction);
+    CADNC_SKETCH_FACADE_PRECHECK("addPoint");
+    CADNC_SKETCH_FACADE_TRY("addPoint")
+        auto geo = std::make_unique<Part::GeomPoint>(Base::Vector3d(p.x, p.y, 0));
+        return impl_->sketch->addGeometry(geo.release(), construction);
+    CADNC_SKETCH_FACADE_CATCH("addPoint")
 }
 
 int SketchFacade::addEllipse(Point2D center, double majorRadius, double minorRadius,
                               double angle, bool construction)
 {
-    if (majorRadius < 1e-7 || minorRadius < 1e-7) return -1;
-    try {
+    CADNC_SKETCH_FACADE_PRECHECK("addEllipse");
+    if (majorRadius < 1e-7 || minorRadius < 1e-7) {
+        throw FacadeError(FacadeError::Code::InvalidArgument,
+            QCoreApplication::translate("SketchFacade",
+                "addEllipse: major and minor radii must be positive"));
+    }
+    CADNC_SKETCH_FACADE_TRY("addEllipse")
         auto geo = std::make_unique<Part::GeomEllipse>();
         geo->setCenter(Base::Vector3d(center.x, center.y, 0));
         geo->setMajorRadius(std::max(majorRadius, minorRadius));
@@ -115,14 +159,19 @@ int SketchFacade::addEllipse(Point2D center, double majorRadius, double minorRad
             geo->setMajorAxisDir(Base::Vector3d(std::cos(angle), std::sin(angle), 0));
         }
         return impl_->sketch->addGeometry(geo.release(), construction);
-    } catch (...) { return -1; }
+    CADNC_SKETCH_FACADE_CATCH("addEllipse")
 }
 
 int SketchFacade::addBSpline(const std::vector<Point2D>& poles, int degree,
                               bool periodic, bool construction)
 {
-    if (poles.size() < 2) return -1;
-    try {
+    CADNC_SKETCH_FACADE_PRECHECK("addBSpline");
+    if (poles.size() < 2) {
+        throw FacadeError(FacadeError::Code::InvalidArgument,
+            QCoreApplication::translate("SketchFacade",
+                "addBSpline: need at least 2 control points"));
+    }
+    CADNC_SKETCH_FACADE_TRY("addBSpline")
         std::vector<Base::Vector3d> pts;
         pts.reserve(poles.size());
         for (const auto& p : poles)
@@ -153,13 +202,18 @@ int SketchFacade::addBSpline(const std::vector<Point2D>& poles, int degree,
             try { impl_->sketch->exposeInternalGeometry(geoId); } catch (...) {}
         }
         return geoId;
-    } catch (...) { return -1; }
+    CADNC_SKETCH_FACADE_CATCH("addBSpline")
 }
 
 int SketchFacade::addPolyline(const std::vector<Point2D>& points, bool construction)
 {
-    if (points.size() < 2) return -1;
-    try {
+    CADNC_SKETCH_FACADE_PRECHECK("addPolyline");
+    if (points.size() < 2) {
+        throw FacadeError(FacadeError::Code::InvalidArgument,
+            QCoreApplication::translate("SketchFacade",
+                "addPolyline: need at least 2 points"));
+    }
+    CADNC_SKETCH_FACADE_TRY("addPolyline")
         int firstId = -1;
         int prevId = -1;
         for (size_t i = 0; i + 1 < points.size(); ++i) {
@@ -171,7 +225,7 @@ int SketchFacade::addPolyline(const std::vector<Point2D>& points, bool construct
             prevId = id;
         }
         return firstId;
-    } catch (...) { return -1; }
+    CADNC_SKETCH_FACADE_CATCH("addPolyline")
 }
 
 void SketchFacade::removeGeometry(int geoId)

@@ -83,6 +83,12 @@ class CadEngine : public QObject {
     /// geometry selection. DatumPlanePanel flips this on demand.
     Q_PROPERTY(bool facePickMode READ facePickMode WRITE setFacePickMode NOTIFY facePickModeChanged)
 
+    /// Last user-visible error message produced by a facade call. Cleared
+    /// to empty on the next successful mutation. Surfaced as a transient
+    /// toast in QML via errorOccurred; read here for status-bar display
+    /// or headless diagnostics.
+    Q_PROPERTY(QString lastError READ lastError NOTIFY errorOccurred)
+
 public:
     explicit CadEngine(QObject* parent = nullptr);
     ~CadEngine() override;
@@ -310,6 +316,8 @@ public:
     /// Forwards to the facePicked signal on the UI thread.
     void reportFacePicked(const QString& featureName, const QString& subName);
 
+    QString lastError() const { return lastError_; }
+
 Q_SIGNALS:
     void featureTreeChanged();
     void sketchChanged();
@@ -319,6 +327,11 @@ Q_SIGNALS:
     void undoStateChanged();
     void facePickModeChanged();
     void facePicked(QString featureName, QString subName);
+
+    /// Per WRAPPER_CONTRACT § 2.3 — emitted when a facade call raises
+    /// FacadeError. QML shows a toast; message already translated via
+    /// FacadeError::userMessage() / qsTr wrappers inside the facade.
+    void errorOccurred(QString message);
 
 private:
     // Internal RAII wrapper that opens a FreeCAD undo transaction on entry
@@ -340,6 +353,13 @@ private:
     void refreshSketch();
     void setStatus(const QString& msg);
     void updateViewportShapes();
+
+    /// Store and broadcast a facade-layer error. Emits errorOccurred so
+    /// QML toast UI reacts; setLastError("") clears after a successful
+    /// mutation.
+    void setLastError(const QString& message);
+
+    QString lastError_;
 
     OccViewport* viewport_ = nullptr;
     QString documentPath_;
