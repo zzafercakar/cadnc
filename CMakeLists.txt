@@ -281,6 +281,14 @@ if(CADNC_ENABLE_FREECAD_BACKEND)
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     )
 
+    # ── Sub-phase 1-Zero contract smoke ─────────────────────────────
+    add_executable(smoke_adapter_contract tests/smoke_adapter_contract.cpp)
+    target_link_libraries(smoke_adapter_contract PRIVATE cadnc_adapter Qt6::Core)
+    target_include_directories(smoke_adapter_contract PRIVATE adapter/inc)
+    set_target_properties(smoke_adapter_contract PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    )
+
     # ── PoC test ────────────────────────────────────────────────────
     add_executable(poc_freecad_test tests/poc_freecad_test.cpp)
     target_link_libraries(poc_freecad_test PRIVATE
@@ -310,6 +318,13 @@ if(CADNC_BUILD_TESTS AND CADNC_ENABLE_FREECAD_BACKEND)
     # Adapter layer test: session → document → sketch → constraints → solve
     add_test(NAME adapter_test
         COMMAND $<TARGET_FILE:test_adapter>
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+    )
+
+    # Sub-phase 1-Zero contract smoke: FacadeError, ScopedTransaction,
+    # recomputeIfNeeded, refactored facade failure paths.
+    add_test(NAME smoke_adapter_contract
+        COMMAND $<TARGET_FILE:smoke_adapter_contract>
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
     )
 
