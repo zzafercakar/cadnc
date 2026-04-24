@@ -3,6 +3,7 @@
     "_source": "FreeCAD <Command>::sAccel at /home/embed/Downloads/FreeCAD-main-1-1-git/src/Mod/<WB>/Gui/*.cpp",
     "shortcuts": {
         "Sketcher_CreatePoint": "G, Y",
-        "Sketcher_CreateLine": "G, L"
+        "Sketcher_CreateLine": "G, L",
+        "Sketcher_CreatePolyline": "G, M"
     }
 }

@@ -45,7 +45,17 @@ Rectangle {
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/circle.svg"; tipText: "Circle (C)"; isActive: activeTool === "circle"; activeColor: "#34D399"; onClicked: toolSelected("circle") }
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/arc.svg"; tipText: "Arc (A)"; isActive: activeTool === "arc"; activeColor: "#34D399"; onClicked: toolSelected("arc") }
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/rect.svg"; tipText: "Rectangle (R)"; isActive: activeTool === "rectangle"; activeColor: "#34D399"; onClicked: toolSelected("rectangle") }
-        CadToolButton { iconPath: "qrc:/resources/icons/sketch/polyline.svg"; tipText: "Polyline (P)"; isActive: activeTool === "polyline"; activeColor: "#34D399"; onClicked: toolSelected("polyline") }
+        // Tool #3 — Sketcher_CreatePolyline (FreeCAD CmdSketcherCreatePolyline
+        // at src/Mod/Sketcher/Gui/CommandCreateGeo.cpp:225). Tooltip and
+        // shortcut preserved from FreeCAD's sToolTipText / sAccel.
+        CadToolButton {
+            iconPath: "qrc:/resources/icons/sketcher/Sketcher_CreatePolyline.svg"
+            tipText: qsTr("Creates a continuous polyline. Press the 'M' key to switch segment modes") + " (G, M)"
+            shortcut: "G, M"
+            isActive: activeTool === "polyline"
+            activeColor: "#34D399"
+            onClicked: toolSelected("polyline")
+        }
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/ellipse.svg"; tipText: "Ellipse (E)"; isActive: activeTool === "ellipse"; activeColor: "#34D399"; onClicked: toolSelected("ellipse") }
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/spline.svg"; tipText: "B-Spline (S)"; isActive: activeTool === "bspline"; activeColor: "#34D399"; onClicked: toolSelected("bspline") }
         // Tool #1 — Sketcher_CreatePoint (FreeCAD CmdSketcherCreatePoint

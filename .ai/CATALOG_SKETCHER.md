@@ -12,7 +12,7 @@
 |---|-----------------|----------|----------------|-------------|--------|-------|
 | 1 | CmdSketcherCreatePoint | Point | `addPoint(x,y)` | SketchToolbar Draw.Point | **DONE** | shortcut `G, Y`; test: test_drawing_point.cpp |
 | 2 | CmdSketcherCreateLine | Line | `addLine(x1,y1,x2,y2,construction=false)` | SketchToolbar Draw.Line | **DONE** | shortcut `G, L`; test: test_drawing_line.cpp |
-| 3 | CmdSketcherCreatePolyline | Polyline | `addPolyline(points[], segmentModes[])` | SketchToolbar Draw.Polyline | TODO | press M for mode switch |
+| 3 | CmdSketcherCreatePolyline | Polyline | `addPolyline(points[], construction=false)` | SketchToolbar Draw.Polyline | **DONE** | shortcut `G, M`; test: test_drawing_polyline.cpp (segment-mode switching deferred to DrawSketchHandlerLineSet port) |
 | 4 | CmdSketcherCreateArc | Arc From Center | `addArcCenter(cx,cy,r,startAng,endAng)` | Draw.Arc group | TODO | |
 | 5 | CmdSketcherCreate3PointArc | Arc From 3 Points | `addArc3Point(p1,p2,p3)` | Draw.Arc group | TODO | |
 | 6 | CmdSketcherCreateArcOfEllipse | Elliptical Arc | `addArcEllipse(cx,cy,rx,ry,rot,startAng,endAng)` | Draw.Arc group | TODO | |
@@ -287,7 +287,7 @@ TEST(SketchSmoke, FullProfile) {
 ## Progress Dashboard (updated by executor)
 
 **Sub-phase completion:**
-- [ ] 1A — Drawing Geometry (2/45)
+- [ ] 1A — Drawing Geometry (3/45)
 - [ ] 1B — Geometric Constraints (0/11)
 - [ ] 1C — Dimensional Constraints (0/9)
 - [ ] 1D — Constraint Management (0/18)
@@ -298,7 +298,7 @@ TEST(SketchSmoke, FullProfile) {
 - [ ] 1I — Sketch Operations (0/13)
 - [ ] 1J — View + Display (0/6)
 
-**Phase 1 total: 2/161 tools DONE**
+**Phase 1 total: 3/161 tools DONE**
 
 ---
 
