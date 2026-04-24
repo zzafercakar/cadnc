@@ -20,6 +20,7 @@ set(PARITY_SKETCH_SOURCES
     test_drawing_circle3point.cpp  # Tool #10 — CmdSketcherCreate3PointCircle
     test_drawing_ellipse.cpp       # Tool #11 — CmdSketcherCreateEllipseByCenter
     test_drawing_ellipse3point.cpp # Tool #12 — CmdSketcherCreateEllipseBy3Points
+    test_drawing_rectangle.cpp     # Tool #13 — CmdSketcherCreateRectangle
     # ... etc.
 )
 

@@ -110,7 +110,15 @@ Rectangle {
             activeColor: "#34D399"
             onClicked: toolSelected("arcParabola")
         }
-        CadToolButton { iconPath: "qrc:/resources/icons/sketch/rect.svg"; tipText: "Rectangle (R)"; isActive: activeTool === "rectangle"; activeColor: "#34D399"; onClicked: toolSelected("rectangle") }
+        // Tool #13 — Sketcher_CreateRectangle (CommandCreateGeo.cpp:762).
+        CadToolButton {
+            iconPath: "qrc:/resources/icons/sketcher/Sketcher_CreateRectangle.svg"
+            tipText: qsTr("Creates a rectangle from 2 corner points") + " (G, R)"
+            shortcut: "G, R"
+            isActive: activeTool === "rectangle"
+            activeColor: "#34D399"
+            onClicked: toolSelected("rectangle")
+        }
         // Tool #3 — Sketcher_CreatePolyline (FreeCAD CmdSketcherCreatePolyline
         // at src/Mod/Sketcher/Gui/CommandCreateGeo.cpp:225). Tooltip and
         // shortcut preserved from FreeCAD's sToolTipText / sAccel.

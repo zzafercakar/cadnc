@@ -13,6 +13,7 @@
         "Sketcher_CreateCircle": "G, C",
         "Sketcher_Create3PointCircle": "G, 3, C",
         "Sketcher_CreateEllipseByCenter": "G, E, E",
-        "Sketcher_CreateEllipseBy3Points": "G, 3, E"
+        "Sketcher_CreateEllipseBy3Points": "G, 3, E",
+        "Sketcher_CreateRectangle": "G, R"
     }
 }

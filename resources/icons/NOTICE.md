@@ -33,6 +33,7 @@ icons in CADNC is permitted provided:
 | resources/icons/sketcher/Sketcher_Create3PointCircle.svg | src/Mod/Sketcher/Gui/Resources/icons/geometry/Sketcher_Create3PointCircle.svg | unchanged |
 | resources/icons/sketcher/Sketcher_CreateEllipseByCenter.svg | src/Mod/Sketcher/Gui/Resources/icons/geometry/Sketcher_CreateEllipseByCenter.svg | unchanged |
 | resources/icons/sketcher/Sketcher_CreateEllipse_3points.svg | src/Mod/Sketcher/Gui/Resources/icons/geometry/Sketcher_CreateEllipse_3points.svg | unchanged |
+| resources/icons/sketcher/Sketcher_CreateRectangle.svg | src/Mod/Sketcher/Gui/Resources/icons/geometry/Sketcher_CreateRectangle.svg | unchanged |
 
 ## CADNC-Original Icons
 
