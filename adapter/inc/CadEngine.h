@@ -189,6 +189,11 @@ public:
                                      double majorRadius, double minorRadius,
                                      double rotationDeg,
                                      double startParam, double endParam);
+    /// Parabolic arc at @p vertex with focal length @p focal, trimmed
+    /// between parametric coordinates (y² = 4·f·x in local frame).
+    Q_INVOKABLE int addArcParabola(double vx, double vy, double focal,
+                                    double rotationDeg,
+                                    double startParam, double endParam);
     Q_INVOKABLE int addRectangle(double x1, double y1, double x2, double y2);
     Q_INVOKABLE int addPoint(double x, double y);
     Q_INVOKABLE int addEllipse(double cx, double cy, double majorR, double minorR, double angleDeg = 0);

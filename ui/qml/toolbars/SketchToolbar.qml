@@ -84,6 +84,15 @@ Rectangle {
             activeColor: "#34D399"
             onClicked: toolSelected("arcHyperbola")
         }
+        // Tool #8 — Sketcher_CreateArcOfParabola (CommandCreateGeo.cpp:459).
+        CadToolButton {
+            iconPath: "qrc:/resources/icons/sketcher/Sketcher_CreateParabolic_Arc.svg"
+            tipText: qsTr("Creates a parabolic arc") + " (G, J)"
+            shortcut: "G, J"
+            isActive: activeTool === "arcParabola"
+            activeColor: "#34D399"
+            onClicked: toolSelected("arcParabola")
+        }
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/rect.svg"; tipText: "Rectangle (R)"; isActive: activeTool === "rectangle"; activeColor: "#34D399"; onClicked: toolSelected("rectangle") }
         // Tool #3 — Sketcher_CreatePolyline (FreeCAD CmdSketcherCreatePolyline
         // at src/Mod/Sketcher/Gui/CommandCreateGeo.cpp:225). Tooltip and

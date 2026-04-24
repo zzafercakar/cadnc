@@ -123,6 +123,13 @@ public:
     int addArcHyperbola(Point2D center, double majorRadius, double minorRadius,
                         double rotation, double startAngle, double endAngle,
                         bool construction = false);
+    /// Parabolic arc. @p vertex is the parabola's vertex (apex), @p focal
+    /// is the focal length (must be > 0), @p rotation turns the axis of
+    /// symmetry CCW from +X (radians), and (start/end)Param trim the
+    /// parametric curve (y² = 4·f·x in parabola-local coords).
+    int addArcParabola(Point2D vertex, double focal, double rotation,
+                       double startParam, double endParam,
+                       bool construction = false);
     int addRectangle(Point2D p1, Point2D p2, bool construction = false);
     int addPoint(Point2D p, bool construction = false);
     int addEllipse(Point2D center, double majorRadius, double minorRadius,

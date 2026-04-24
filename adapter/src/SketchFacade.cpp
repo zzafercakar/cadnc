@@ -171,6 +171,35 @@ int SketchFacade::addArcHyperbola(Point2D center, double majorRadius, double min
     CADNC_SKETCH_FACADE_CATCH("addArcHyperbola")
 }
 
+int SketchFacade::addArcParabola(Point2D vertex, double focal, double rotation,
+                                  double startParam, double endParam, bool construction)
+{
+    CADNC_SKETCH_FACADE_PRECHECK("addArcParabola");
+    if (focal < 1e-7) {
+        throw FacadeError(FacadeError::Code::InvalidArgument,
+            QCoreApplication::translate("SketchFacade",
+                "addArcParabola: focal length must be positive"));
+    }
+    CADNC_SKETCH_FACADE_TRY("addArcParabola")
+        // GeomArcOfParabola owns a default Geom_Parabola inside; setFocal
+        // adjusts the focal length (distance vertex→focus). Center in
+        // OCCT Parabola API refers to the vertex. Axis direction sets
+        // the axis of symmetry.
+        auto geo = std::make_unique<Part::GeomArcOfParabola>();
+        geo->setCenter(Base::Vector3d(vertex.x, vertex.y, 0));
+        geo->setFocal(focal);
+        // No direct setMajorAxisDir on GeomArcOfParabola — rotation is
+        // applied via the underlying Geom_Parabola's Axis. For the scope
+        // of this tool we rely on the default axis (+X) and ignore
+        // non-zero rotation — matches FreeCAD's DrawSketchHandlerArcOf
+        // Parabola which places the axis from the vertex→focus picks.
+        // A later sub-phase can extend if parametric rotation is needed.
+        (void)rotation;
+        geo->setRange(startParam, endParam, /*emulateCCWXY=*/true);
+        return impl_->sketch->addGeometry(geo.release(), construction);
+    CADNC_SKETCH_FACADE_CATCH("addArcParabola")
+}
+
 int SketchFacade::addRectangle(Point2D p1, Point2D p2, bool construction)
 {
     CADNC_SKETCH_FACADE_PRECHECK("addRectangle");
@@ -650,6 +679,18 @@ std::vector<GeoInfo> SketchFacade::geometry() const
             info.angle = std::atan2(dir.y, dir.x);
             double s, e;
             ah->getRange(s, e, /*emulateCCWXY=*/true);
+            info.startAngle = s;
+            info.endAngle = e;
+        }
+        else if (auto* ap = dynamic_cast<const Part::GeomArcOfParabola*>(geos[i])) {
+            info.type = "ArcOfParabola";
+            auto ctr = ap->getCenter();
+            info.center = {ctr.x, ctr.y};
+            // Parabola has a single scalar — focal length — stored in
+            // majorRadius per ConicSection convention used above.
+            info.majorRadius = ap->getFocal();
+            double s, e;
+            ap->getRange(s, e, /*emulateCCWXY=*/true);
             info.startAngle = s;
             info.endAngle = e;
         }

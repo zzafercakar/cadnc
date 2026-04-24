@@ -653,6 +653,24 @@ int CadEngine::addArcHyperbola(double cx, double cy,
     } catch (const FacadeError& e) { setLastError(e.userMessage()); return -1; }
 }
 
+int CadEngine::addArcParabola(double vx, double vy, double focal,
+                               double rotationDeg,
+                               double startParam, double endParam)
+{
+    if (!activeSketch_) { setLastError(tr("No active sketch")); return -1; }
+    const double rot = rotationDeg * M_PI / 180.0;
+    try {
+        ScopedTransaction tx(document_.get(), "Add Arc (Parabola)");
+        int id = activeSketch_->addArcParabola({vx, vy}, focal, rot,
+                                                startParam, endParam);
+        tx.commit();
+        setLastError(QString());
+        Q_EMIT undoStateChanged();
+        refreshSketch();
+        return id;
+    } catch (const FacadeError& e) { setLastError(e.userMessage()); return -1; }
+}
+
 int CadEngine::addRectangle(double x1, double y1, double x2, double y2)
 {
     if (!activeSketch_) { setLastError(tr("No active sketch")); return -1; }
