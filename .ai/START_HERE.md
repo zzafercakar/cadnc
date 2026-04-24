@@ -103,7 +103,7 @@ ctest --test-dir build --output-on-failure
 
 ## Referans Kaynaklar
 
-- **FreeCAD kaynak:** `/home/embed/Downloads/FreeCAD-main-1-1/`
+- **FreeCAD kaynak:** `/home/embed/Downloads/FreeCAD-main-1-1-git/`
 - **MilCAD:** `/home/embed/Dev/MilCAD/` (onceki proje)
 - **LibreCAD:** `/home/embed/Downloads/LibreCAD-master/` (2D CAD referansi)
 - **SolveSpace:** `/home/embed/Downloads/solvespace-master/` (constraint solver ref)

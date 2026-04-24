@@ -7,13 +7,13 @@ modul yapilarini ve onemli dosyalari kayit altina alir.
 
 ## 1. FreeCAD Kaynak Kodu
 
-**Konum:** `/home/embed/Downloads/FreeCAD-main-1-1/`
+**Konum:** `/home/embed/Downloads/FreeCAD-main-1-1-git/`
 **Versiyon:** FreeCAD 1.2.0-dev
 **Lisans:** LGPL-2.1-or-later
 **Kullanim:** CAD backend — Base, App, Part, Sketcher, PartDesign modulleri dogrudan projeye kopyalandi
 
 ### 1.1 Base Modulu (Math, I/O, Type System, Python)
-**Kaynak:** `/home/embed/Downloads/FreeCAD-main-1-1/src/Base/`
+**Kaynak:** `/home/embed/Downloads/FreeCAD-main-1-1-git/src/Base/`
 **Hedef:** `freecad/Base/` (173 dosya)
 
 Kritik dosyalar:
@@ -36,7 +36,7 @@ Kritik dosyalar:
 - `PyObjectBase.cpp/h` — Python base nesne
 
 ### 1.2 App Modulu (Document, Property, Expression, Transaction)
-**Kaynak:** `/home/embed/Downloads/FreeCAD-main-1-1/src/App/`
+**Kaynak:** `/home/embed/Downloads/FreeCAD-main-1-1-git/src/App/`
 **Hedef:** `freecad/App/` (210 dosya, 4.5 MB)
 
 Dokuman yonetimi:
@@ -72,7 +72,7 @@ Feature siniflar:
 - `FeaturePython.cpp/h` (770/461) — Python feature
 
 ### 1.3 Part/App Modulu (TopoShape, Geometry, Features)
-**Kaynak:** `/home/embed/Downloads/FreeCAD-main-1-1/src/Mod/Part/App/`
+**Kaynak:** `/home/embed/Downloads/FreeCAD-main-1-1-git/src/Mod/Part/App/`
 **Hedef:** `freecad/Mod/Part/App/` (286 dosya, 4.5 MB)
 
 Ana siniflar:
@@ -104,7 +104,7 @@ Yardimci siniflar:
 - `ExtrusionHelper.cpp/h` — Extrusion yardimcilari
 
 ### 1.4 Sketcher/App Modulu (SketchObject, Constraints, planegcs)
-**Kaynak:** `/home/embed/Downloads/FreeCAD-main-1-1/src/Mod/Sketcher/App/`
+**Kaynak:** `/home/embed/Downloads/FreeCAD-main-1-1-git/src/Mod/Sketcher/App/`
 **Hedef:** `freecad/Mod/Sketcher/App/` (58 dosya, 1.9 MB)
 
 **BU MODUL EN KRITIK OLANDIR — MilCAD'deki tum sketch sorunlarini cozer.**
@@ -138,7 +138,7 @@ planegcs (Geometric Constraint Solver):
 - `planegcs/Util.h` (42) — Yardimci fonksiyonlar
 
 ### 1.5 PartDesign/App Modulu (Parametrik Feature Modelleme)
-**Kaynak:** `/home/embed/Downloads/FreeCAD-main-1-1/src/Mod/PartDesign/App/`
+**Kaynak:** `/home/embed/Downloads/FreeCAD-main-1-1-git/src/Mod/PartDesign/App/`
 **Hedef:** `freecad/Mod/PartDesign/App/` (80 dosya)
 
 Body ve Feature base:
@@ -190,7 +190,7 @@ Diger:
 - `Measure.cpp/h` — Olcum
 
 ### 1.6 3rdParty Kutuphaneler
-**Kaynak:** `/home/embed/Downloads/FreeCAD-main-1-1/src/3rdParty/`
+**Kaynak:** `/home/embed/Downloads/FreeCAD-main-1-1-git/src/3rdParty/`
 **Hedef:** `freecad/3rdParty/`
 
 Kopyalananlar:

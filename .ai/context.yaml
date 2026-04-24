@@ -146,7 +146,7 @@ status:
 
 reference_projects:
   freecad:
-    path: "/home/embed/Downloads/FreeCAD-main-1-1/"
+    path: "/home/embed/Downloads/FreeCAD-main-1-1-git/"
     usage: "CAD backend kaynak kodu (moduller kopyalandi)"
   freecad_alt:
     path: "/home/embed/Downloads/FreeCAD-main/"

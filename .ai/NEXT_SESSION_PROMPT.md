@@ -7,7 +7,7 @@
 Önceki session'da bu prensip ihlal edildi: `addRectangle` adapter'da 4 line + 4 coincident yazıldı ama FreeCAD'in eklediği **2 H + 2 V constraint atlandı** → Distance constraint verince rectangle deforme oldu.
 
 **Kural:** Yeni bir sketch işlemi yazmadan önce
-`/home/embed/Downloads/FreeCAD-main-1-1/src/Mod/Sketcher/Gui/DrawSketchHandler*.h`
+`/home/embed/Downloads/FreeCAD-main-1-1-git/src/Mod/Sketcher/Gui/DrawSketchHandler*.h`
 dosyalarına bak. FreeCAD nasıl yapıyor — birebir aynısını yap.
 
 ---
@@ -27,7 +27,7 @@ dosyalarına bak. FreeCAD nasıl yapıyor — birebir aynısını yap.
 
 #### BUG-004: Smart Dimension rectangle'ı deforme ediyor (KÖK SEBEP TESPİT EDİLDİ)
 **Semptom:** Rectangle çiz → bir kenarına Distance 100 ver → rectangle yamuk olur (paralelkenar veya dörtgen).
-**Kök sebep:** [adapter/src/SketchFacade.cpp:62-88](adapter/src/SketchFacade.cpp#L62-L88) `addRectangle` sadece 4 coincident constraint ekliyor. FreeCAD ise [DrawSketchHandlerRectangle.h:1658-1696](file:///home/embed/Downloads/FreeCAD-main-1-1/src/Mod/Sketcher/Gui/DrawSketchHandlerRectangle.h) içinde **2 horizontal + 2 vertical** (veya rotated için Parallel+Perpendicular) ekliyor.
+**Kök sebep:** [adapter/src/SketchFacade.cpp:62-88](adapter/src/SketchFacade.cpp#L62-L88) `addRectangle` sadece 4 coincident constraint ekliyor. FreeCAD ise [DrawSketchHandlerRectangle.h:1658-1696](file:///home/embed/Downloads/FreeCAD-main-1-1-git/src/Mod/Sketcher/Gui/DrawSketchHandlerRectangle.h) içinde **2 horizontal + 2 vertical** (veya rotated için Parallel+Perpendicular) ekliyor.
 **Çözüm:** `addRectangle` sonuna ekle:
 ```cpp
 addHorizontal(id0); addHorizontal(id2);  // top + bottom
@@ -89,7 +89,7 @@ Net çözüm için pan davranışını `drawGrid` ile karşılaştır.
 2. Yüz seçiminde OCCT AIS_InteractiveContext'ten TopoDS_Face ID alınır, CadEngine'e aktarılır.
 3. CadDocument::addSketch(planeType | faceRef) — face reference ise sketch Placement = face'in yerel frame'i (OCCT BRepGProp_Face normal + tangent), `MapMode=FlatFace` set.
 4. Sketch editing açılınca 3D viewport'ta sketch plane vizualize edilir (ince grid overlay yüzey üstünde).
-**Referans:** `/home/embed/Downloads/FreeCAD-main-1-1/src/Mod/PartDesign/Gui/TaskDlgFeaturePick.cpp` (plane picker), `Sketcher/App/SketchObject.cpp` Support property, `Part/App/AttachExtension.cpp` MapMode.
+**Referans:** `/home/embed/Downloads/FreeCAD-main-1-1-git/src/Mod/PartDesign/Gui/TaskDlgFeaturePick.cpp` (plane picker), `Sketcher/App/SketchObject.cpp` Support property, `Part/App/AttachExtension.cpp` MapMode.
 
 #### UX-010: Pad/Pocket/Revolution çift-tıkla düzenleme
 **Semptom:** Feature tree'de Sketch'e çift tıklayınca sketch edit mode açılıyor; Pad/Pocket/Revolution çift tıklanınca hiçbir şey olmuyor.
@@ -653,8 +653,8 @@ DISPLAY=:0 QT_QPA_PLATFORM=xcb ./build/cadnc
 
 ### FreeCAD Reference (her zaman önce buna bak)
 ```
-/home/embed/Downloads/FreeCAD-main-1-1/src/Mod/Sketcher/Gui/DrawSketchHandler*.h
-/home/embed/Downloads/FreeCAD-main-1-1/src/Mod/Sketcher/App/SketchObject.cpp
+/home/embed/Downloads/FreeCAD-main-1-1-git/src/Mod/Sketcher/Gui/DrawSketchHandler*.h
+/home/embed/Downloads/FreeCAD-main-1-1-git/src/Mod/Sketcher/App/SketchObject.cpp
 ```
 
 ### Kurallar (Hatırlatma)

@@ -21,7 +21,6 @@ UI Shell (QML) → Adapter Layer (C++) → FreeCAD Modules → OCCT Kernel
 
 ## Critical Rules
 
-- UI code MUST NOT include FreeCAD headers — use adapter/ facades only
 - AIS_InteractiveContext operations ONLY in render thread — never UI thread
 - Linux: NEVER use EGL — OCCT compiled with GLX
 - OCCT libraries must be listed individually, not via ${OpenCASCADE_LIBRARIES}
@@ -49,6 +48,6 @@ DISPLAY=:0 QT_QPA_PLATFORM=xcb ./build/cadnc
 ## Reference Sources
 
 Detailed file paths in `.ai/REFERENCE_SOURCES.md`:
-- FreeCAD: `/home/embed/Downloads/FreeCAD-main-1-1/`
+- FreeCAD: `/home/embed/Downloads/FreeCAD-main-1-1-git/`
 - MilCAD: `/home/embed/Dev/MilCAD/`
 - LibreCAD, SolveSpace, Luban: `/home/embed/Downloads/`
