@@ -42,7 +42,15 @@ Rectangle {
             activeColor: "#34D399"
             onClicked: toolSelected("line")
         }
-        CadToolButton { iconPath: "qrc:/resources/icons/sketch/circle.svg"; tipText: "Circle (C)"; isActive: activeTool === "circle"; activeColor: "#34D399"; onClicked: toolSelected("circle") }
+        // Tool #9 — Sketcher_CreateCircle (CommandCreateGeo.cpp:558).
+        CadToolButton {
+            iconPath: "qrc:/resources/icons/sketcher/Sketcher_CreateCircle.svg"
+            tipText: qsTr("Creates a circle from a center and rim point") + " (G, C)"
+            shortcut: "G, C"
+            isActive: activeTool === "circle"
+            activeColor: "#34D399"
+            onClicked: toolSelected("circle")
+        }
         // Tool #4 — Sketcher_CreateArc (FreeCAD CmdSketcherCreateArc
         // at src/Mod/Sketcher/Gui/CommandCreateGeo.cpp:330). Tooltip and
         // shortcut preserved from FreeCAD's sToolTipText / sAccel.
