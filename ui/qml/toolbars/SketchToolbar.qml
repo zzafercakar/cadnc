@@ -43,7 +43,17 @@ Rectangle {
             onClicked: toolSelected("line")
         }
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/circle.svg"; tipText: "Circle (C)"; isActive: activeTool === "circle"; activeColor: "#34D399"; onClicked: toolSelected("circle") }
-        CadToolButton { iconPath: "qrc:/resources/icons/sketch/arc.svg"; tipText: "Arc (A)"; isActive: activeTool === "arc"; activeColor: "#34D399"; onClicked: toolSelected("arc") }
+        // Tool #4 — Sketcher_CreateArc (FreeCAD CmdSketcherCreateArc
+        // at src/Mod/Sketcher/Gui/CommandCreateGeo.cpp:330). Tooltip and
+        // shortcut preserved from FreeCAD's sToolTipText / sAccel.
+        CadToolButton {
+            iconPath: "qrc:/resources/icons/sketcher/Sketcher_CreateArc.svg"
+            tipText: qsTr("Creates an arc defined by a center point and an end point") + " (G, A)"
+            shortcut: "G, A"
+            isActive: activeTool === "arc"
+            activeColor: "#34D399"
+            onClicked: toolSelected("arc")
+        }
         CadToolButton { iconPath: "qrc:/resources/icons/sketch/rect.svg"; tipText: "Rectangle (R)"; isActive: activeTool === "rectangle"; activeColor: "#34D399"; onClicked: toolSelected("rectangle") }
         // Tool #3 — Sketcher_CreatePolyline (FreeCAD CmdSketcherCreatePolyline
         // at src/Mod/Sketcher/Gui/CommandCreateGeo.cpp:225). Tooltip and

@@ -4,6 +4,7 @@
     "shortcuts": {
         "Sketcher_CreatePoint": "G, Y",
         "Sketcher_CreateLine": "G, L",
-        "Sketcher_CreatePolyline": "G, M"
+        "Sketcher_CreatePolyline": "G, M",
+        "Sketcher_CreateArc": "G, A"
     }
 }

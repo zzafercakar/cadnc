@@ -24,6 +24,7 @@ icons in CADNC is permitted provided:
 | resources/icons/sketcher/Sketcher_CreatePoint.svg | src/Mod/Sketcher/Gui/Resources/icons/geometry/Sketcher_CreatePoint.svg | unchanged |
 | resources/icons/sketcher/Sketcher_CreateLine.svg | src/Mod/Sketcher/Gui/Resources/icons/geometry/Sketcher_CreateLine.svg | unchanged |
 | resources/icons/sketcher/Sketcher_CreatePolyline.svg | src/Mod/Sketcher/Gui/Resources/icons/geometry/Sketcher_CreatePolyline.svg | unchanged |
+| resources/icons/sketcher/Sketcher_CreateArc.svg | src/Mod/Sketcher/Gui/Resources/icons/geometry/Sketcher_CreateArc.svg | unchanged |
 
 ## CADNC-Original Icons
 

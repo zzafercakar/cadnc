@@ -11,6 +11,7 @@ set(PARITY_SKETCH_SOURCES
     test_drawing_point.cpp         # Tool #1 — CmdSketcherCreatePoint
     test_drawing_line.cpp          # Tool #2 — CmdSketcherCreateLine
     test_drawing_polyline.cpp      # Tool #3 — CmdSketcherCreatePolyline
+    test_drawing_arc.cpp           # Tool #4 — CmdSketcherCreateArc
     # ... etc.
 )
 
